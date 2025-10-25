@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Video Analytics Builder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>AI Video Analytics Builder</h1>
+    <div class="top-buttons">
+      <button>Save</button>
+      <button>Load</button>
+      <button>Prototype</button>
+      <button>Mockup</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Sidebar -->
+    <section class="sidebar">
+      <input type="text" placeholder="Search functions..." class="search-box">
+
+      <div class="category">
+        <h2>SURVEILLANCE & SECURITY</h2>
+        <div class="function">
+          <div class="oval-btn draggable" draggable="true">
+            <strong>Luggage Counter</strong>
+            <p>Count luggage items in real time.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workspace -->
+    <section class="workspace" id="workspace">
+      <div class="workspace-grid"></div>
+      <p class="workspace-tip">
+      </p>
+    </section>
+
+    <!-- Right Panel -->
+    <section class="right-panel">
+      <div class="node-editor">Select a node to edit properties.</div>
+      <div class="camera-section">
+        <div class="tabs">
+          <button class="active">Live Feed</button>
+          <button>Alerts</button>
+          <button>Reports</button>
+        </div>
+        <div class="camera-preview">
+          <p>Camera 1 · 1920×1080 · 30 FPS</p>
+          <p class="overlay">Overlay demo</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
