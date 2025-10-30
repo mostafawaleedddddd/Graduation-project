@@ -112,8 +112,9 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  overflow: hidden;
+  overflow: visible; /* <— changed from hidden */
 }
+
 
 .workspace-grid {
   flex: 1;
@@ -195,4 +196,61 @@ body {
 }
 .dropped:hover {
   transform: scale(1.05);
+}
+/* Optional: Visual feedback when dragging the original item */
+.oval-btn.dragging {
+    opacity: 0.5; 
+    border-style: dashed;
+}
+/* Style for the button container inside the dropped node */
+.dropped-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Space between controls */
+    margin-top: 5px;
+}
+
+/* Style for the connection dots/text */
+.connector-point {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981; /* Green color for real-time status/input */
+    border-radius: 50%;
+    margin-right: 4px;
+}
+
+/* Base style for Link/To buttons */
+.node-action-btn {
+    background: #1f2937; /* Darker background */
+    border: 1px solid #374151;
+    color: #e5e7eb;
+    padding: 2px 8px;
+    border-radius: 12px; /* Pill shape */
+    cursor: pointer;
+    font-size: 0.7rem;
+    line-height: 1; /* Adjust vertical centering */
+    transition: background 0.2s;
+    user-select: none; /* Prevent text selection during click/drag */
+}
+
+.node-action-btn:hover {
+    background: #2d3748;
+}
+
+/* Highlight for connection mode */
+.connecting-mode {
+    border: 2px solid #3b82f6 !important; /* Blue glow */
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+/* CSS for the connections (lines) */
+.connection-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+  height: 2px;
+  background-color: #93c5fd;
+  transform-origin: 0 0;
 }
