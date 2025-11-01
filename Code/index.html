@@ -3,68 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Video Analytics Builder</title>
+  <title>Flow Editor - Function Block Designer</title>
+
+  <!-- Link to external CSS -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1>AI Video Analytics Builder</h1>
-    <div class="top-buttons">
-      <button>Save</button>
-      <button>Load</button>
-      <button>Prototype</button>
-      <button>Mockup</button>
+  <div class="container">
+    <div class="sidebar">
+      <h3>Functions</h3>
+      <div class="functionality" draggable="true" data-type="Object Detection">
+        👁️ Object Detection
+      </div>
+      <div class="functionality" draggable="true" data-type="Color Detection">
+        🎨 Color Detection
+      </div>
+      <div class="functionality" draggable="true" data-type="Tracking">
+        🎯 Tracking
+      </div>
     </div>
-  </header>
 
-  <main class="layout">
-    <!-- Sidebar -->
-    <section class="sidebar">
-      <input type="text" placeholder="Search functions..." class="search-box">
-
-      <div class="category">
-        <h2>SURVEILLANCE & SECURITY</h2>
-        <div class="function">
-          <div class="oval-btn draggable" draggable="true">
-            <strong>Object detection</strong>
-            <p>Detect Object in real time.</p>
-          </div>
-          <div class="oval-btn draggable" draggable="true">
-            <strong>Color detection</strong>
-            <p>Detect Color in real time.</p>
-          </div>
-          <div class="oval-btn draggable" draggable="true">
-            <strong>Tracking</strong>
-            <p>Tracks objects in real time.</p>
-          </div>
-        </div>
+    <div class="canvas-wrapper">
+      <div class="canvas" id="canvas">
+        <svg id="connectionSvg">
+          <defs>
+            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#6496ff;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#9334ea;stop-opacity:1" />
+            </linearGradient>
+          </defs>
+        </svg>
       </div>
-    </section>
+    </div>
 
-    <!-- Workspace -->
-    <section class="workspace" id="workspace">
-      <div class="workspace-grid"></div>
-      <p class="workspace-tip">
-      </p>
-    </section>
-
-    <!-- Right Panel -->
-    <section class="right-panel">
-      <div class="node-editor">Select a node to edit properties.</div>
-      <div class="camera-section">
-        <div class="tabs">
-          <button class="active">Live Feed</button>
-          <button>Alerts</button>
-          <button>Reports</button>
-        </div>
-        <div class="camera-preview">
-          <p>Camera 1 · 1920×1080 · 30 FPS</p>
-          <p class="overlay">Overlay demo</p>
-        </div>
+    <div class="live-feed-panel">
+      <div class="live-feed-title">
+        <div class="live-feed-dot"></div>
+        Live Feed
       </div>
-    </section>
-  </main>
+      <div class="live-feed-content">
+        <span>Waiting for input...</span>
+      </div>
+    </div>
+  </div>
 
+  <!-- Link to external JS -->
   <script src="script.js"></script>
 </body>
 </html>

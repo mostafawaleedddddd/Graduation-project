@@ -1,333 +1,196 @@
-// Global state for connection management
-let isConnecting = false;
-let startNode = null;
-let currentLine = null;
-let nodeIdCounter = 0; // To give each dropped node a unique ID
-const connections = [];
-const draggableItems = document.querySelectorAll('.draggable');
-const workspace = document.getElementById('workspace');
+const canvas = document.getElementById('canvas');
+        const svg = document.getElementById('connectionSvg');
+        const functionalities = document.querySelectorAll('.functionality');
+        const liveFeedContent = document.querySelector('.live-feed-content');
 
-// --- 1. Attach dragstart event to EVERY draggable item (Kept from previous) ---
-draggableItems.forEach(item => {
-  item.addEventListener('dragstart', (e) => {
-    e.dataTransfer.setData('text/html', e.target.outerHTML);
-    e.target.classList.add('dragging');
-  });
+        let blockCount = 0;
+        const blocks = new Map();
+        const connections = [];
+        let draggedBlock = null;
+        let linking = false;
+        let linkingFromBlock = null;
 
-  item.addEventListener('dragend', (e) => {
-    e.target.classList.remove('dragging');
-  });
-});
-
-
-// --- 2. Allow dropping (Kept from previous) ---
-workspace.addEventListener('dragover', (e) => {
-  e.preventDefault();
-});
-
-
-// --- 3. Drop and clone (Crucial updates here) ---
-workspace.addEventListener('drop', (e) => {
-  e.preventDefault();
-
-  const htmlData = e.dataTransfer.getData('text/html');
-
-  // Safety check: only proceed if valid data
-  if (!htmlData) return;
-
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = htmlData;
-  const clone = tempDiv.firstChild;
-
-  if (!clone || !clone.classList.contains('draggable')) return;
-
-  const rect = workspace.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-
-  // --- NEW: Set up the clone's structure and controls ---
-  const title = clone.querySelector('strong').textContent;
-  const description = clone.querySelector('p').textContent;
-
-  // Create the new interior HTML structure
-  clone.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center;">
-                <span class="connector-point"></span>
-                <strong>${title}</strong>
-            </div>
-            <div class="dropped-controls">
-                <button class="node-action-btn link-btn">Link</button>
-                <button class="node-action-btn to-btn">To</button>
-            </div>
-        </div>
-        <p>${description}</p>
-    `;
-
-  // Clean up clone attributes
-  clone.removeAttribute('draggable');
-  clone.classList.remove('draggable');
-  clone.classList.add('dropped');
-  clone.id = `node-${nodeIdCounter++}`; // Give it a unique ID
-
-  // Position the clone
-  clone.style.left = `${x - 60}px`;
-  clone.style.top = `${y - 20}px`;
-
-  // Enable moving and connection
-  enableDrag(clone);
-  setupConnectionLogic(clone); // NEW FUNCTION CALL
-  workspace.appendChild(clone);
-});
-
-
-// --- 4. Enable dragging of dropped nodes (Kept from previous) ---
-function enableDrag(node) {
-  let offsetX, offsetY;
-
-  node.addEventListener('mousedown', (e) => {
-    if (e.button !== 0 || isConnecting || e.target.closest('.node-action-btn')) return;
-    e.stopPropagation();
-
-    offsetX = e.offsetX;
-    offsetY = e.offsetY;
-
-    const move = (ev) => {
-      ev.preventDefault();
-      const rect = workspace.getBoundingClientRect();
-
-      // Move node
-      node.style.left = `${ev.clientX - rect.left - offsetX}px`;
-      node.style.top = `${ev.clientY - rect.top - offsetY}px`;
-
-      // Update all connected lines in real time
-      requestAnimationFrame(() => {
-        connections.forEach(conn => {
-          if (conn.startNodeId === node.id || conn.endNodeId === node.id) {
-            redrawLine(conn);
-          }
+        // Make canvas droppable
+        canvas.addEventListener('dragover', (e) => e.preventDefault());
+        canvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('text/plain');
+            if (type) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                createBlock(type, x, y);
+            }
         });
-      });
-    };
 
-    const up = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-    };
+        // Dragging from sidebar
+        functionalities.forEach(func => {
+            func.addEventListener('dragstart', (e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', func.dataset.type);
+            });
+        });
 
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
-  });
-}
+        function createBlock(type, x, y) {
+            const blockId = `block-${blockCount++}`;
+            const block = document.createElement('div');
+            block.className = 'block';
+            block.id = blockId;
+            block.innerHTML = `
+                <div class="block-title">${type.split(' ')[0]}</div>
+                <div class="block-controls">
+                    <button class="link-btn">Link</button>
+                    <button class="delete-btn">✕</button>
+                </div>
+                <div class="port input"></div>
+                <div class="port output"></div>
+            `;
+            block.style.left = (x - 70) + 'px';
+            block.style.top = (y - 40) + 'px';
 
+            canvas.appendChild(block);
 
+            const blockData = {
+                id: blockId,
+                type: type,
+                element: block,
+                x: x - 70,
+                y: y - 40,
+                connections: []
+            };
 
+            blocks.set(blockId, blockData);
 
-// ... (Keep all code above setupConnectionLogic as is) ...
+            const linkBtn = block.querySelector('.link-btn');
+            const deleteBtn = block.querySelector('.delete-btn');
 
-// --- 5. Connection Logic (UPDATED) ---
+            linkBtn.addEventListener('click', () => toggleLinking(blockId, linkBtn));
+            deleteBtn.addEventListener('click', () => deleteBlock(blockId));
 
-function setupConnectionLogic(node) {
-  const linkBtn = node.querySelector('.link-btn');
-  const toBtn = node.querySelector('.to-btn');
+            // Make block draggable
+            makeBlockDraggable(blockId);
+            updateLiveFeed(`Added ${type} block`);
+        }
 
-  // Logic for the 'Link' button (start connection)
-  linkBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
+        function makeBlockDraggable(blockId) {
+            const blockElement = document.getElementById(blockId);
+            let offsetX, offsetY;
 
-    if (!isConnecting) {
-      // START connection mode
-      isConnecting = true;
-      startNode = node;
-      node.classList.add('connecting-mode');
+            blockElement.addEventListener('mousedown', (e) => {
+                if (e.target.classList.contains('link-btn') || e.target.classList.contains('delete-btn')) return;
+                
+                draggedBlock = blockId;
+                const rect = blockElement.getBoundingClientRect();
+                offsetX = e.clientX - rect.left;
+                offsetY = e.clientY - rect.top;
 
-      // Create the temporary line element
-      currentLine = document.createElement('div');
-      currentLine.classList.add('connection-line', 'temp'); // Added 'temp' class
-      workspace.appendChild(currentLine);
+                blockElement.classList.add('selected');
+            });
 
-      document.addEventListener('mousemove', drawLine);
-      document.addEventListener('mouseup', cancelConnection);
+            document.addEventListener('mousemove', (e) => {
+                if (draggedBlock !== blockId) return;
 
-    } else if (startNode === node) {
-      // Clicking the same node again cancels
-      cancelConnection(false); // Pass false: connection was NOT completed
-    }
-  });
+                const canvasRect = canvas.getBoundingClientRect();
+                
+                let x = e.clientX - canvasRect.left - offsetX;
+                let y = e.clientY - canvasRect.top - offsetY;
 
-  // Logic for the 'To' button (complete connection)
-  toBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (isConnecting && startNode && startNode !== node) {
-      // COMPLETE connection
-      connectNodes(startNode, node);
-      cancelConnection(true); // Pass true: connection WAS completed
-    }
-  });
-}
+                // Constrain within canvas
+                x = Math.max(0, Math.min(x, canvasRect.width - blockElement.offsetWidth));
+                y = Math.max(0, Math.min(y, canvasRect.height - blockElement.offsetHeight));
 
-function drawLine(e) {
-  if (!isConnecting || !startNode || !currentLine) return;
+                blockElement.style.left = x + 'px';
+                blockElement.style.top = y + 'px';
 
-  // Use the function to get the correct connection point coordinates
-  const startCoords = getNodeConnectionPoint(startNode, 'output');
+                blocks.get(draggedBlock).x = x;
+                blocks.get(draggedBlock).y = y;
 
-  const workspaceRect = workspace.getBoundingClientRect();
+                updateConnections();
+            });
 
-  const startX = startCoords.x;
-  const startY = startCoords.y;
+            document.addEventListener('mouseup', () => {
+                if (draggedBlock === blockId) {
+                    blockElement.classList.remove('selected');
+                    draggedBlock = null;
+                }
+            });
+        }
 
-  const endX = e.clientX - workspaceRect.left;
-  const endY = e.clientY - workspaceRect.top;
+        function toggleLinking(blockId, linkBtn) {
+            if (linking && linkingFromBlock === blockId) {
+                // Toggle off
+                linking = false;
+                linkingFromBlock = null;
+                linkBtn.classList.remove('active');
+                updateLiveFeed('Linking cancelled');
+            } else if (linking && linkingFromBlock !== blockId) {
+                // Create connection
+                createConnection(linkingFromBlock, blockId);
+                document.getElementById(linkingFromBlock).querySelector('.link-btn').classList.remove('active');
+                linking = false;
+                linkingFromBlock = null;
+                updateLiveFeed(`Connected blocks`);
+            } else {
+                // Toggle on
+                linking = true;
+                linkingFromBlock = blockId;
+                linkBtn.classList.add('active');
+                updateLiveFeed(`Select another block to link...`);
+            }
+        }
 
-  // Use vector math to position and rotate the line
-  const dx = endX - startX;
-  const dy = endY - startY;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        function createConnection(fromId, toId) {
+            const connectionId = `${fromId}-${toId}`;
+            if (!connections.find(c => c.from === fromId && c.to === toId)) {
+                connections.push({ from: fromId, to: toId, id: connectionId });
+                updateConnections();
+            }
+        }
 
-  currentLine.style.width = `${length}px`;
-  currentLine.style.transform = `translate(${startX}px, ${startY}px) rotate(${angle}deg)`;
-  currentLine.style.transformOrigin = '0 0';
-}
+        function updateConnections() {
+            svg.querySelectorAll('path').forEach(path => path.remove());
 
-function connectNodes(nodeA, nodeB) {
-  // safety checks
-  if (!nodeA || !nodeB) return;
+            connections.forEach(conn => {
+                const fromBlock = blocks.get(conn.from);
+                const toBlock = blocks.get(conn.to);
 
-  // get coordinates
-  const startCoords = getNodeConnectionPoint(nodeA, 'output');
-  const endCoords = getNodeConnectionPoint(nodeB, 'input');
+                if (fromBlock && toBlock) {
+                    const fromRect = fromBlock.element.getBoundingClientRect();
+                    const toRect = toBlock.element.getBoundingClientRect();
+                    const canvasRect = canvas.getBoundingClientRect();
 
-  // geometry
-  const dx = endCoords.x - startCoords.x;
-  const dy = endCoords.y - startCoords.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                    const x1 = fromRect.right - canvasRect.left;
+                    const y1 = fromRect.top - canvasRect.top + fromRect.height / 2;
+                    const x2 = toRect.left - canvasRect.left;
+                    const y2 = toRect.top - canvasRect.top + toRect.height / 2;
 
-  // ensure currentLine is an element and inside workspace
-  if (!currentLine) {
-    console.error('connectNodes called but currentLine is null');
-    return;
-  }
-  // set required styles
-  currentLine.style.position = 'absolute';
-  currentLine.style.top = '0';
-  currentLine.style.left = '0';
-  currentLine.style.transformOrigin = '0 0';
-  currentLine.classList.remove('temp');
-  currentLine.classList.add('permanent-connection');
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const midX = (x1 + x2) / 2;
+                    line.setAttribute('d', `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`);
+                    line.setAttribute('class', 'line');
+                    svg.appendChild(line);
+                }
+            });
+        }
 
-  // finalize transform
-  currentLine.style.width = `${length}px`;
-  currentLine.style.transform = `translate(${startCoords.x}px, ${startCoords.y}px) rotate(${angle}deg)`;
+        function deleteBlock(blockId) {
+            const blockElement = document.getElementById(blockId);
+            blockElement.style.opacity = '0';
+            blockElement.style.transform = 'scale(0.8)';
+            
+            setTimeout(() => {
+                blockElement.remove();
+                blocks.delete(blockId);
+                connections = connections.filter(c => c.from !== blockId && c.to !== blockId);
+                updateConnections();
+                updateLiveFeed('Block removed');
+            }, 200);
+        }
 
-  // ensure the line is a child of workspace
-  if (currentLine.parentNode !== workspace) {
-    workspace.appendChild(currentLine);
-  }
+        function updateLiveFeed(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            liveFeedContent.innerHTML = `<span>[${timestamp}] ${message}</span>`;
+        }
 
-  // store connection (store direct DOM reference)
-  connections.push({
-    lineElement: currentLine,
-    startNodeId: nodeA.id,
-    endNodeId: nodeB.id
-  });
-
-  // reset
-  currentLine = null;
-
-  console.log(`Connection created: ${nodeA.id} -> ${nodeB.id}`);
-}
-
-/**
- * Helper function to calculate the precise coordinates of the connection points
- * @param {HTMLElement} node The node element.
- * @param {string} type 'input' for the .connector-point (green dot) or 'output' for the .link-btn
- * @returns {{x: number, y: number}} Workspace relative coordinates
- */
-function getNodeConnectionPoint(node, type) {
-  // Defensive checks
-  if (!node || !workspace) return { x: 0, y: 0 };
-
-  // Force layout recalculation so we read up-to-date metrics
-  const workspaceRect = workspace.getBoundingClientRect();
-
-  // Default fallback: center-left or center-right of node
-  const nodeRect = node.getBoundingClientRect();
-  let x = nodeRect.left - workspaceRect.left + (type === 'output' ? nodeRect.width : 0);
-  let y = nodeRect.top - workspaceRect.top + (nodeRect.height / 2);
-
-  // choose target element
-  let targetElement = null;
-  if (type === 'output') {
-    targetElement = node.querySelector('.link-btn');
-  } else { // input
-    targetElement = node.querySelector('.connector-point');
-  }
-
-  if (targetElement) {
-    const tRect = targetElement.getBoundingClientRect();
-    // center of target
-    x = tRect.left - workspaceRect.left + (tRect.width / 2);
-    y = tRect.top - workspaceRect.top + (tRect.height / 2);
-
-    // for output use right edge
-    if (type === 'output') x = tRect.right - workspaceRect.left;
-  }
-
-  return { x, y };
-}
-
-
-/**
- * Cleans up the state and temporary line.
- * @param {boolean} wasCompleted True if the line was successfully connected.
- */
-function cancelConnection(wasCompleted) {
-  isConnecting = false;
-
-  if (startNode) {
-    startNode.classList.remove('connecting-mode');
-  }
-  startNode = null;
-
-  // IMPORTANT: Only remove the line if the connection was NOT completed.
-  // If it was completed, 'currentLine' now holds the permanent line.
-  if (currentLine && !wasCompleted) {
-    currentLine.remove();
-  }
-  currentLine = null;
-
-  document.removeEventListener('mousemove', drawLine);
-  document.removeEventListener('mouseup', cancelConnection);
-}
-
-/**
- * Redraws a single connection line based on the current positions of its nodes.
- @param {object} connectionObj - An object from the connections array.
- */
-function redrawLine(conn) {
-  const line = document.getElementById(conn.id);
-  const startNode = document.getElementById(conn.startNodeId);
-  const endNode = document.getElementById(conn.endNodeId);
-
-  if (!line || !startNode || !endNode) return;
-
-  const workspaceRect = workspace.getBoundingClientRect();
-  const startPort = startNode.querySelector('.output-port');
-  const endPort = endNode.querySelector('.input-port');
-
-  const startRect = startPort.getBoundingClientRect();
-  const endRect = endPort.getBoundingClientRect();
-
-  // Compute positions relative to workspace
-  const startX = startRect.left - workspaceRect.left + startRect.width / 2;
-  const startY = startRect.top - workspaceRect.top + startRect.height / 2;
-  const endX = endRect.left - workspaceRect.left + endRect.width / 2;
-  const endY = endRect.top - workspaceRect.top + endRect.height / 2;
-
-  // Draw a smooth cubic Bézier curve between nodes
-  const dx = Math.abs(endX - startX) * 0.5;
-  line.setAttribute('d', `M ${startX} ${startY} C ${startX + dx} ${startY}, ${endX - dx} ${endY}, ${endX} ${endY}`);
-}
+        // Initial message
+        updateLiveFeed('System ready. Drag blocks to canvas.');
