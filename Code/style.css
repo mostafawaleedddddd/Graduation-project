@@ -252,16 +252,12 @@ svg {
     width: 4px;
 }
 
-.live-feed-content::-webkit-scrollbar-track {
-    background: transparent;
-}
-
 .live-feed-content::-webkit-scrollbar-thumb {
     background: rgba(100, 150, 255, 0.3);
     border-radius: 2px;
 }
 
-/* Ports */
+/* Connection Ports */
 .port {
     width: 10px;
     height: 10px;
@@ -280,14 +276,7 @@ svg {
     box-shadow: 0 0 12px rgba(100, 150, 255, 0.6);
 }
 
-.port.output {
-    right: -15px;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.port.input {
-    left: -15px;
-    top: 50%;
-    transform: translateY(-50%);
-}
+.port.top { left: 50%; top: -15px; transform: translateX(-50%); }
+.port.bottom { left: 50%; bottom: -15px; transform: translateX(-50%); }
+.port.left { left: -15px; top: 50%; transform: translateY(-50%); }
+.port.right { right: -15px; top: 50%; transform: translateY(-50%); }

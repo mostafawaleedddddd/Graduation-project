@@ -9,6 +9,7 @@ const canvas = document.getElementById('canvas');
         let draggedBlock = null;
         let linking = false;
         let linkingFromBlock = null;
+        let updatePending = false;
 
         // Make canvas droppable
         canvas.addEventListener('dragover', (e) => e.preventDefault());
@@ -42,8 +43,10 @@ const canvas = document.getElementById('canvas');
                     <button class="link-btn">Link</button>
                     <button class="delete-btn">✕</button>
                 </div>
-                <div class="port input"></div>
-                <div class="port output"></div>
+                <div class="port top" data-port="top"></div>
+                <div class="port bottom" data-port="bottom"></div>
+                <div class="port left" data-port="left"></div>
+                <div class="port right" data-port="right"></div>
             `;
             block.style.left = (x - 70) + 'px';
             block.style.top = (y - 40) + 'px';
@@ -105,7 +108,10 @@ const canvas = document.getElementById('canvas');
                 blocks.get(draggedBlock).x = x;
                 blocks.get(draggedBlock).y = y;
 
-                updateConnections();
+                if (!updatePending) {
+                    updatePending = true;
+                    requestAnimationFrame(updateConnections);
+                }
             });
 
             document.addEventListener('mouseup', () => {
@@ -139,15 +145,72 @@ const canvas = document.getElementById('canvas');
             }
         }
 
+        function getClosestPorts(fromBlockId, toBlockId) {
+            const fromBlock = blocks.get(fromBlockId).element;
+            const toBlock = blocks.get(toBlockId).element;
+
+            const fromRect = fromBlock.getBoundingClientRect();
+            const toRect = toBlock.getBoundingClientRect();
+
+            const ports = ['top', 'bottom', 'left', 'right'];
+            let minDistance = Infinity;
+            let closestFromPort = 'right';
+            let closestToPort = 'left';
+
+            ports.forEach(fromPort => {
+                ports.forEach(toPort => {
+                    const fromPortEl = fromBlock.querySelector(`.port[data-port="${fromPort}"]`);
+                    const toPortEl = toBlock.querySelector(`.port[data-port="${toPort}"]`);
+
+                    const fromPortRect = fromPortEl.getBoundingClientRect();
+                    const toPortRect = toPortEl.getBoundingClientRect();
+
+                    const distance = Math.hypot(
+                        fromPortRect.left - toPortRect.left,
+                        fromPortRect.top - toPortRect.top
+                    );
+
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestFromPort = fromPort;
+                        closestToPort = toPort;
+                    }
+                });
+            });
+
+            return { fromPort: closestFromPort, toPort: closestToPort };
+        }
+
+        function getPortPosition(blockId, port) {
+            const blockElement = blocks.get(blockId).element;
+            const portEl = blockElement.querySelector(`.port[data-port="${port}"]`);
+            const portRect = portEl.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            return {
+                x: portRect.left - canvasRect.left + portRect.width / 2,
+                y: portRect.top - canvasRect.top + portRect.height / 2
+            };
+        }
+
         function createConnection(fromId, toId) {
             const connectionId = `${fromId}-${toId}`;
             if (!connections.find(c => c.from === fromId && c.to === toId)) {
-                connections.push({ from: fromId, to: toId, id: connectionId });
+                const ports = getClosestPorts(fromId, toId);
+                connections.push({ 
+                    from: fromId, 
+                    to: toId, 
+                    id: connectionId,
+                    fromPort: ports.fromPort,
+                    toPort: ports.toPort
+                });
                 updateConnections();
             }
         }
 
         function updateConnections() {
+            updatePending = false;
+            
             svg.querySelectorAll('path').forEach(path => path.remove());
 
             connections.forEach(conn => {
@@ -155,18 +218,12 @@ const canvas = document.getElementById('canvas');
                 const toBlock = blocks.get(conn.to);
 
                 if (fromBlock && toBlock) {
-                    const fromRect = fromBlock.element.getBoundingClientRect();
-                    const toRect = toBlock.element.getBoundingClientRect();
-                    const canvasRect = canvas.getBoundingClientRect();
-
-                    const x1 = fromRect.right - canvasRect.left;
-                    const y1 = fromRect.top - canvasRect.top + fromRect.height / 2;
-                    const x2 = toRect.left - canvasRect.left;
-                    const y2 = toRect.top - canvasRect.top + toRect.height / 2;
+                    const fromPos = getPortPosition(conn.from, conn.fromPort);
+                    const toPos = getPortPosition(conn.to, conn.toPort);
 
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    const midX = (x1 + x2) / 2;
-                    line.setAttribute('d', `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`);
+                    const midX = (fromPos.x + toPos.x) / 2;
+                    line.setAttribute('d', `M ${fromPos.x} ${fromPos.y} C ${midX} ${fromPos.y}, ${midX} ${toPos.y}, ${toPos.x} ${toPos.y}`);
                     line.setAttribute('class', 'line');
                     svg.appendChild(line);
                 }
@@ -178,11 +235,12 @@ const canvas = document.getElementById('canvas');
             blockElement.style.opacity = '0';
             blockElement.style.transform = 'scale(0.8)';
             
+            connections.splice(0, connections.length, ...connections.filter(c => c.from !== blockId && c.to !== blockId));
+            updateConnections();
+            
             setTimeout(() => {
                 blockElement.remove();
                 blocks.delete(blockId);
-                connections = connections.filter(c => c.from !== blockId && c.to !== blockId);
-                updateConnections();
                 updateLiveFeed('Block removed');
             }, 200);
         }
