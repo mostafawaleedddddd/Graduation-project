@@ -1,4 +1,43 @@
-const canvas = document.getElementById('canvas');
+// Navbar button functions
+        function saveProject() {
+            const projectData = {
+                blocks: Array.from(blocks.values()).map(block => ({
+                    id: block.id,
+                    type: block.type,
+                    x: block.x,
+                    y: block.y
+                })),
+                connections: connections
+            };
+            console.log('Project saved:', projectData);
+            updateLiveFeed('Project saved successfully!');
+            
+        }
+
+        function uploadProject() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        console.log('Project loaded:', data);
+                        updateLiveFeed('Project uploaded successfully!');
+                        // You can add logic here to reconstruct blocks from data
+                    } catch (error) {
+                        console.error('Invalid file format', error);
+                        updateLiveFeed('Error: Invalid file format');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        const canvas = document.getElementById('canvas');
         const svg = document.getElementById('connectionSvg');
         const functionalities = document.querySelectorAll('.functionality');
         const liveFeedContent = document.querySelector('.live-feed-content');

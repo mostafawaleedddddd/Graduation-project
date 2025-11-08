@@ -7,18 +7,25 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Navbar -->
+    <div class="navbar">
+        <div class="navbar-left"></div>
+        <div class="navbar-center">
+            <div class="navbar-title">ModuVision</div>
+        </div>
+        <div class="navbar-right">
+            <div class="navbar-logo">
+                <img src="/placeholder.svg" alt="ModuVision Logo" title="Project Logo">
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <div class="sidebar">
             <h3>Functions</h3>
-            <div class="functionality" draggable="true" data-type="Object Detection">
-                👁️ Object Detection
-            </div>
-            <div class="functionality" draggable="true" data-type="Color Detection">
-                🎨 Color Detection
-            </div>
-            <div class="functionality" draggable="true" data-type="Tracking">
-                🎯 Tracking
-            </div>
+            <div class="functionality" draggable="true" data-type="Object Detection">👁️ Object Detection</div>
+            <div class="functionality" draggable="true" data-type="Color Detection">🎨 Color Detection</div>
+            <div class="functionality" draggable="true" data-type="Tracking">🎯 Tracking</div>
         </div>
 
         <div class="canvas-wrapper">
@@ -36,8 +43,14 @@
 
         <div class="live-feed-panel">
             <div class="live-feed-title">
-                <div class="live-feed-dot"></div>
-                Live Feed
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="live-feed-dot"></div>
+                    Live Feed
+                </div>
+                <div class="live-feed-buttons">
+                    <button class="live-feed-btn" onclick="saveProject()">💾 Save</button>
+                    <button class="live-feed-btn" >📤 Upload</button>
+                </div>
             </div>
             <div class="live-feed-content">
                 <span>Waiting for input...</span>
