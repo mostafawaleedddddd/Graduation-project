@@ -13,11 +13,10 @@ body {
     display: flex;
     flex-direction: column;
 }
-
 /* Navbar styles */
 .navbar {
     width: 100%;
-    height: 60px;
+    height: 80px;
     background: rgba(20, 20, 35, 0.95);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(100, 150, 255, 0.2);
@@ -29,10 +28,11 @@ body {
     z-index: 100;
 }
 
+/* Left, center, right sections */
 .navbar-left {
     display: flex;
-    gap: 12px;
     align-items: center;
+    gap: 16px;
 }
 
 .navbar-center {
@@ -41,16 +41,17 @@ body {
     transform: translateX(-50%);
 }
 
+/* Title text */
 .navbar-title {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 700;
     background: linear-gradient(135deg, #6496ff 0%, #9334ea 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    background-clip: text;
     letter-spacing: 0.5px;
 }
 
+/* Buttons */
 .navbar-btn {
     background: linear-gradient(135deg, #6496ff 0%, #4a6fb5 100%);
     border: none;
@@ -74,38 +75,79 @@ body {
     transform: translateY(0);
 }
 
+/* LOGO FIX — fully responsive and better scaling */
 .navbar-logo {
-    width: 40px;
-    height: 40px;
-    background: rgba(100, 150, 255, 0.1);
-    border: 1px solid rgba(100, 150, 255, 0.3);
-    border-radius: 8px;
+    width: 80px;
+    height: 80px;
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
+    border-radius: 10px;
+    background: transparent;
     cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.navbar-logo:hover {
-    border-color: rgba(100, 150, 255, 0.6);
-    box-shadow: 0 0 12px rgba(100, 150, 255, 0.3);
 }
 
 .navbar-logo img {
-    width: 100%;
-    height: 100%;
+    width: 120%;
+    height: auto;
     object-fit: contain;
-    border-radius: 6px;
+    transform: scale(1.3); /* makes it visibly larger */
+    transition: transform 0.3s ease;
 }
 
+.navbar-logo:hover img {
+    transform: scale(1.45);
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .navbar {
+        height: 70px;
+        padding: 0 16px;
+    }
+
+    .navbar-title {
+        font-size: 22px;
+    }
+
+    .navbar-logo {
+        width: 50px;
+        height: 50px;
+    }
+}
+
+@media (max-width: 600px) {
+    .navbar {
+        flex-direction: row;
+        justify-content: space-between;
+        height: 64px;
+    }
+
+    .navbar-title {
+        font-size: 18px;
+    }
+
+    .navbar-logo {
+        width: 44px;
+        height: 44px;
+    }
+
+    .navbar-btn {
+        font-size: 10px;
+        padding: 6px 12px;
+    }
+}
+
+/* Page container below navbar */
 .container {
     display: flex;
-    height: calc(100vh - 60px);
+    height: calc(100vh - 80px);
     gap: 12px;
     padding: 12px;
     flex: 1;
 }
+
 
 /* Sidebar */
 .sidebar {
