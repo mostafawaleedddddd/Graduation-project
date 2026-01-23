@@ -1,38 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>ModuVision</title>
-  <link rel="stylesheet" href="/CSS/styles.css" />
+
+  <!-- Shared navbar styles (if needed) -->
+  <link rel="stylesheet" href="/css/Navbar.css">
+
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
 
   <!-- NAVBAR -->
-  <div class="navbar">
-    <div class="navbar-left"></div>
-
-    <div class="navbar-center">
-      <div class="navbar-title">ModuVision</div>
-    </div>
-
-    <div class="navbar-right">
-     <a href="Authentication.html?mode=signup" class="navbar-btn">Join Us</a>
-     <a href="Authentication.html?mode=login" class="navbar-btn outline">Login</a>
+  <%- include("partials/navbar") %>
 
 
-      <div class="navbar-logo">
-        <img src="/Media/logo_2_new-removebg-preview_new.png"
-             alt="ModuVision Logo"
-             draggable="false" />
-      </div>
-    </div>
-  </div>
-
-  <!-- HERO -->
+  <!-- HERO SECTION -->
   <section class="hero">
     <video autoplay muted loop playsinline class="hero-video">
-      <source src="/Media/background.mp4" type="video/mp4" />
+      <source src="/materials/background.mp4" type="video/mp4">
     </video>
 
     <div class="hero-overlay"></div>
@@ -41,19 +27,21 @@
       <h1>Modular Intelligence for Retail Vision</h1>
       <p>
         ModuVision is a flexible AI vision platform that enables retail environments
-        to dynamically compose intelligent visual workflows—without retraining entire systems.
+        to dynamically compose intelligent visual workflows.
       </p>
 
       <div class="hero-buttons">
-        <a href="Authentication.html?mode=signup" class="navbar-btn">Get Started</a>
-        <a href="Authentication.html?mode=login" class="navbar-btn outline">Login</a>
+        <a href="/auth?mode=signup" class="navbar-btn">Get Started</a>
+        <a href="/auth?mode=login" class="navbar-btn outline">Login</a>
       </div>
     </div>
   </section>
 
-  <!-- ABOUT -->
+
+  <!-- ABOUT SECTION -->
   <section class="about">
     <h2>About ModuVision</h2>
+
     <p class="about-intro">
       ModuVision rethinks how computer vision systems are built. Instead of rigid,
       single-purpose pipelines, we introduce a modular intelligence layer that adapts
@@ -89,7 +77,7 @@
       <div class="module-card">
         <h3>⚡ Adapt</h3>
         <p>
-          Retail systems evolve instantly—new tasks, new goals, no downtime,
+          Retail systems evolve instantly — new tasks, new goals, no downtime,
           and no full retraining cycles.
         </p>
       </div>
@@ -97,14 +85,15 @@
     </div>
   </section>
 
-  <!-- JOIN -->
+
+  <!-- JOIN SECTION -->
   <section class="join">
     <h2>Join the Future of Intelligent Retail Vision</h2>
     <p>Start building, experimenting, and deploying smarter systems today.</p>
 
     <div class="join-buttons">
-      <a href="Authentication.html?mode=signup" class="navbar-btn">Create Account</a>
-      <a href="Authentication.html?mode=login" class="navbar-btn outline">Login</a>
+      <a href="/auth?mode=signup" class="navbar-btn">Create Account</a>
+      <a href="/auth?mode=login" class="navbar-btn outline">Login</a>
     </div>
   </section>
 
