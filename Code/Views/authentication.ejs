@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ModuVision | Authentication</title>
+  <link rel="stylesheet" href="/css/Navbar.css">
+  <link rel="stylesheet" href="/css/authentication.css">
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+  
+  <%- include("partials/navbar") %>
+
+
+  <!-- BACKGROUND VIDEO -->
+  <video autoplay muted loop playsinline class="bg-video">
+    <source src="/materials/background.mp4" type="video/mp4">
+  </video>
+  <div class="overlay"></div>
+
+
+  <!-- AUTH CARD -->
+  <div class="auth-container">
+
+    <div class="auth-tabs">
+      <button class="tab active" onclick="showLogin()">Login</button>
+      <button class="tab" onclick="showSignup()">Sign Up</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <form id="login-form" class="auth-form">
+      <h2>Welcome Back</h2>
+      <p>Log in to access your ModuVision dashboard.</p>
+
+      <input type="email" placeholder="Email address" required />
+
+      <div class="password-wrapper">
+        <input type="password" id="login-password" placeholder="Password" required />
+        <span class="eye" onclick="togglePassword('login-password', this)">
+          <i class="fa-solid fa-eye"></i>
+        </span>
+      </div>
+
+      <button type="submit" class="submit-btn">Login</button>
+    </form>
+
+
+    <!-- SIGNUP FORM -->
+    <form id="signup-form" class="auth-form hidden">
+      <h2>Create an Account</h2>
+      <p>Start building modular vision workflows.</p>
+
+      <input type="text" placeholder="Full name" required />
+      <input type="email" placeholder="Email address" required />
+      <input type="text" placeholder="Password" required />
+
+      <div class="password-wrapper">
+        <input type="password" id="confirm-password" placeholder="Confirm Password" required />
+        <span class="eye" onclick="togglePassword('confirm-password', this)">
+          <i class="fa-solid fa-eye"></i>
+        </span>
+      </div>
+
+      <button type="submit" class="submit-btn">Sign Up</button>
+    </form>
+
+  </div>
+
+
+  <!-- AUTH SCRIPT -->
+  <script src="/scripts/authentication.js"></script>
+</body>
+</html>
