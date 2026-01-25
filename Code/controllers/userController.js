@@ -28,6 +28,7 @@ async function addUser(req,res){
 try{
   let Full_name=req.body.fullName;
   let email=req.body.email;
+  console.log("REQ BODY:", req.body);
   const query={EmailAddress:email,Name:Full_name} 
   let user = await users.findOne(query);
   if(user){
@@ -43,7 +44,7 @@ try{
     });
     await user.save()
         .then(()=>{
-            res.redirect('/user/login');
+            res.json({ message: "Account created successfully" });
         })
   }
 }

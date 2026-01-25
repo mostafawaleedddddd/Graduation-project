@@ -12,5 +12,5 @@ router.use((req, res, next) => {
         res.render('Error', { message: 'You don\'t have an authority to access this page',user: (req.session.user === undefined ? "" : req.session.user) })
     }
 });
-router.get('/',(req,res)=>{res.render('Dashboard',{user: (req.session.user === undefined ? "" : req.session.user)})});
+router.get('/user/login',(req,res)=>{res.render('Dashboard',{user: (req.session.user === undefined ? "" : req.session.user)})});
 module.exports = router;

@@ -19,80 +19,75 @@ function showSignup() {
 // Validate signup form
 function validateSignup() {
   const form = document.getElementById('signup-form');
+
   const fullName = form.querySelector('input[type="text"]').value.trim();
   const email = form.querySelector('input[type="email"]').value.trim();
-  const password = form.querySelector('input[type="password"]').value.trim();
-  const confirmPassword = form.querySelector('#confirm-password').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const confirmPassword = document.getElementById('confirm-password').value.trim();
 
-  // Check required fields
   if (!fullName || !email || !password || !confirmPassword) {
     alert("Please fill all required fields.");
     return false;
   }
 
-  // Name validation (no numbers, only letters, spaces, or hyphen)
-  if (/\d/.test(fullName) || !/^[a-zA-Z\s-]+$/.test(fullName)) {
-    alert("Invalid name. Only letters, spaces, and hyphens allowed.");
-    return false;
-  }
-
-  // Email validation
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    alert("Invalid email address.");
-    return false;
-  }
-
-  // Password match
   if (password !== confirmPassword) {
     alert("Passwords do not match.");
     return false;
   }
+  const passwordRegex =/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d!@#$%^&*()-_=+{};:,<.>]{8,}$/;
 
-  // Password strength
-  if (
-    password.length < 8 ||
-    !/[A-Z]/.test(password) ||
-    !/[a-z]/.test(password) ||
-    !/\d/.test(password) ||
-    !/[!@#$%^&*()\-_=+{};:,<.>]/.test(password)
-  ) {
-    alert("Password must be at least 8 characters and include uppercase, lowercase, number, and special character.");
+  if (!passwordRegex.test(password)) {
+    alert(
+      "Password not accepted.\n\n" +
+      "Your password must:\n" +
+      "• Be at least 8 characters long\n" +
+      "• Contain at least one uppercase letter\n" +
+      "• Contain at least one lowercase letter\n" +
+      "• Contain at least one number\n" +
+      "• Contain at least one special character (@$!%*?& etc.)"
+    );
     return false;
   }
+
 
   return true;
 }
 
-// Attach submit event to signup form
-document.getElementById('signup-form').addEventListener('submit', function(e) {
-  e.preventDefault(); // Stop normal form submission
 
-  if (!validateSignup()) return;
+document.addEventListener("DOMContentLoaded", () => {
 
-  const form = e.target;
-  const fullName = form.querySelector('input[type="text"]').value.trim();
-  const email = form.querySelector('input[type="email"]').value.trim();
-  const password = form.querySelector('input[type="password"]').value.trim();
-  console.log({ fullName, email, password });
+  // Attach submit event to signup form
+  const signupForm = document.getElementById('signup-form');
 
-  // Send AJAX POST
-  fetch('/addUser', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fullName, email, password })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.error) {
-      alert(data.error);
-    } else {
-      alert(data.message);
-      form.reset(); // Clear form
-      showLogin();   // Switch to login tab
-    }
-  })
-  .catch(err => {
-    console.error(err);
-    alert('Something went wrong. Try again.');
+  if (!signupForm) return; // safety guard
+
+  signupForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    if (!validateSignup()) return;
+
+    const form = e.target;
+    const fullName = form.querySelector('input[type="text"]').value.trim();
+    const email = form.querySelector('input[type="email"]').value.trim();
+    const password = form.querySelector('input[type="password"]').value.trim();
+
+    console.log({ fullName, email, password });
+
+    fetch('/addUser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName, email, password })
+    })
+    .then(res => res.json())
+    .then(data => {
+      alert(data.message || "Account created");
+      form.reset();
+      showLogin();
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Something went wrong.');
+    });
   });
+
 });
