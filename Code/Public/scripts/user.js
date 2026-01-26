@@ -16,7 +16,79 @@ function showSignup() {
   document.getElementById('signup-form').classList.remove('hidden');
 }
 
-// Validate signup form
+document.addEventListener("DOMContentLoaded", () => {
+
+  const passwordInput = document.getElementById("password");
+  const popup = document.getElementById("password-popup");
+
+  const rules = {
+    length: document.getElementById("rule-length"),
+    upper: document.getElementById("rule-upper"),
+    lower: document.getElementById("rule-lower"),
+    number: document.getElementById("rule-number"),
+    special: document.getElementById("rule-special"),
+    space: document.getElementById("rule-space"),
+  };
+
+  function updateRules(value) {
+    let passed = 0;
+
+    if (value.length >= 8 && value.length <= 20) {
+      rules.length.innerHTML = "✅ 8–20 characters";
+      passed++;
+    } else rules.length.innerHTML = "❌ 8–20 characters";
+
+    if (/[A-Z]/.test(value)) {
+      rules.upper.innerHTML = "✅ At least one capital letter";
+      passed++;
+    } else rules.upper.innerHTML = "❌ At least one capital letter";
+
+    if (/[a-z]/.test(value)) {
+      rules.lower.innerHTML = "✅ At least one lowercase letter";
+      passed++;
+    } else rules.lower.innerHTML = "❌ At least one lowercase letter";
+
+    if (/\d/.test(value)) {
+      rules.number.innerHTML = "✅ At least one number";
+      passed++;
+    } else rules.number.innerHTML = "❌ At least one number";
+
+    if (/[@$!%*?&]/.test(value)) {
+      rules.special.innerHTML = "✅ At least one special character";
+      passed++;
+    } else rules.special.innerHTML = "❌ At least one special character";
+
+    if (!/\s/.test(value)) {
+      rules.space.innerHTML = "✅ No spaces";
+      passed++;
+    } else rules.space.innerHTML = "❌ No spaces";
+
+    // Hide popup ONLY when all pass (like image)
+    if (passed === 6) {
+      popup.classList.add("hidden");
+    } else {
+      popup.classList.remove("hidden");
+    }
+  }
+
+  // Show popup when user interacts
+  passwordInput.addEventListener("focus", () => {
+    popup.classList.remove("hidden");
+  });
+
+  passwordInput.addEventListener("input", () => {
+    updateRules(passwordInput.value);
+  });
+
+  passwordInput.addEventListener("blur", () => {
+    if (!passwordInput.value) popup.classList.add("hidden");
+  });
+
+});
+
+/* ============================
+   FORM VALIDATION (CLEANED)
+============================ */
 function validateSignup() {
   const form = document.getElementById('signup-form');
 
@@ -34,60 +106,46 @@ function validateSignup() {
     alert("Passwords do not match.");
     return false;
   }
-  const passwordRegex =/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d!@#$%^&*()-_=+{};:,<.>]{8,}$/;
+
+  // Final hard check (popup already guided user)
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[^\s]{8,20}$/;
 
   if (!passwordRegex.test(password)) {
-    alert(
-      "Password not accepted.\n\n" +
-      "Your password must:\n" +
-      "• Be at least 8 characters long\n" +
-      "• Contain at least one uppercase letter\n" +
-      "• Contain at least one lowercase letter\n" +
-      "• Contain at least one number\n" +
-      "• Contain at least one special character (@$!%*?& etc.)"
-    );
+    alert("Password does not meet all requirements.");
     return false;
   }
-
 
   return true;
 }
 
 
 document.addEventListener("DOMContentLoaded", () => {
-
-  // Attach submit event to signup form
   const signupForm = document.getElementById('signup-form');
+  if (!signupForm) return;
 
-  if (!signupForm) return; // safety guard
-
-  signupForm.addEventListener('submit', function(e) {
+  signupForm.addEventListener('submit', function (e) {
     e.preventDefault();
-
     if (!validateSignup()) return;
 
     const form = e.target;
     const fullName = form.querySelector('input[type="text"]').value.trim();
     const email = form.querySelector('input[type="email"]').value.trim();
-    const password = form.querySelector('input[type="password"]').value.trim();
-
-    console.log({ fullName, email, password });
+    const password = document.getElementById('password').value.trim();
 
     fetch('/addUser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fullName, email, password })
     })
-    .then(res => res.json())
-    .then(data => {
-      alert(data.message || "Account created");
-      form.reset();
-      showLogin();
-    })
-    .catch(err => {
-      console.error(err);
-      alert('Something went wrong.');
-    });
+      .then(res => res.json())
+      .then(() => {
+        form.reset();
+        window.location.href = "/successful-login";
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Something went wrong.');
+      });
   });
-
 });

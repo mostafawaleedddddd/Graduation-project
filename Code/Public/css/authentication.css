@@ -95,6 +95,53 @@ body {
 }
 
 /* PASSWORD */
+.password-box {
+  position: relative;
+}
+
+.password-popup {
+  position: absolute;
+  top: 90%;
+  left: 0;
+  width: 280px;
+  background: #aaaaaa;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  font-size: 14px;
+  z-index: 100;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.password-popup::before {
+  content: "";
+  position: absolute;
+  top: -20px;
+  left: 20px;
+  border-width: 10px;
+  border-style: solid;
+  border-color: transparent transparent #aaaaaa transparent;
+}
+
+.hidden {
+  display: none;
+}
+
+.password-popup li {
+  margin: 6px 0;
+  font-weight: 500;
+  color: #272525;
+}
+
+.password-popup p {
+  margin: 6px 0;
+  font-weight: 500;
+  color: #000000;
+}
+
+
+/*Confirm password*/
 .password-wrapper {
   position: relative;
 }
@@ -106,7 +153,7 @@ body {
 .eye {
   position: absolute;
   right: 16px;
-  top: 50%;
+  margin-top: 20px;
   transform: translateY(-50%);
   cursor: pointer;
 }

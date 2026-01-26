@@ -32,7 +32,7 @@ try{
   const query={EmailAddress:email,Name:Full_name} 
   let user = await users.findOne(query);
   if(user){
-    res.json({message:"User already exists"});
+    res.status(400).json({success:false, message:"User already exists"});
   }  
   else{
     let password=req.body.password;
@@ -44,13 +44,13 @@ try{
     });
     await user.save()
         .then(()=>{
-            res.json({ message: "Account created successfully" });
+            res.json({success: true, message: "Account created successfully" });
         })
   }
 }
 catch(error){
   console.error(error);  // Log the error for debugging
-  res.status(500).json({ message: "Internal server error" });
+  res.status(500).json({success: false, message: "Internal server error" });
 }
 }
 async function checkCredentials(req,res){
