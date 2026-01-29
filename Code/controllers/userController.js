@@ -54,7 +54,7 @@ catch(error){
 }
 }
 async function checkCredentials(req,res){
-  var query = { EmailAddress: req.body.Email, Password: req.body.Password };
+  var query = { EmailAddress: req.body.email, Password: req.body.password };
   var found=false;
   await users.find(query)
   .then(result=>{
@@ -66,9 +66,9 @@ async function checkCredentials(req,res){
       console.log(err);
   });
   if(found){
-      res.send('Success');
+      res.json({success: true, message: "Account Already Exists" });
   }else{
-      res.send('Fail');
+      res.json({success: false, message: "Account does not exist" });
   }
 }
 module.exports = {

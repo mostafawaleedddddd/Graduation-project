@@ -118,7 +118,21 @@ function validateSignup() {
 
   return true;
 }
-
+function createUser(fullName, email, password) {
+  fetch('/addUser', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fullName, email, password })
+  })
+    .then(res => res.json())
+    .then(() => {
+      window.location.href = "/successful-login";
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Something went wrong.');
+    });
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById('signup-form');
@@ -132,20 +146,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const fullName = form.querySelector('input[type="text"]').value.trim();
     const email = form.querySelector('input[type="email"]').value.trim();
     const password = document.getElementById('password').value.trim();
-
-    fetch('/addUser', {
+    fetch('/checkUser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fullName, email, password })
+      body: JSON.stringify({ email, password })
     })
       .then(res => res.json())
-      .then(() => {
-        form.reset();
-        window.location.href = "/successful-login";
+      .then(data => {
+        if (data.success) {
+          // account already exists
+          alert(data.message || 'Account already exists');
+        } else {
+          // account does not exist → create it
+          createUser(fullName, email, password);
+        }
       })
       .catch(err => {
         console.error(err);
         alert('Something went wrong.');
       });
+
   });
 });
