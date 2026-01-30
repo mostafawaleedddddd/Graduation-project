@@ -168,3 +168,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
   });
 });
+document.addEventListener("DOMContentLoaded", () => {
+  const loginForm = document.getElementById('login-form');
+  if (!loginForm) return;
+
+  loginForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    const email = loginForm.querySelector('input[type="email"]').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+
+    if (!email || !password) {
+      alert("Please enter email and password");
+      return;
+    }
+    console.log(email, password);
+    fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          // ✅ login success
+          window.location.href = "/user"; // dashboard
+        } else {
+          // ❌ wrong credentials
+          alert(data.message || "Wrong credentials");
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Something went wrong");
+      });
+  });
+});
