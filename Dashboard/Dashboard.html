@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/Dashboard/css.css">
 </head>
 <body>
+
     <!-- Navbar -->
     <div class="navbar">
         <div class="navbar-left"></div>
@@ -17,16 +18,14 @@
 
         <div class="navbar-right">
             <div class="navbar-logo">
-                <!-- ✅ Logo is now non-draggable -->
-                <img src="/Dashboard/logo.png"
-                     alt="ModuVision Logo"
-                     title="Project Logo"
-                     draggable="false">
+                <img src="/Dashboard/logo.png" alt="ModuVision Logo" draggable="false">
             </div>
         </div>
     </div>
 
     <div class="container">
+
+        <!-- Sidebar -->
         <div class="sidebar">
             <h3>Functions</h3>
 
@@ -41,38 +40,43 @@
             <div class="functionality" draggable="true" data-type="Tracking">
                 🎯 Tracking
             </div>
+            
         </div>
 
+        <!-- Canvas -->
         <div class="canvas-wrapper">
             <div class="canvas" id="canvas">
                 <svg id="connectionSvg">
                     <defs>
                         <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#6496ff; stop-opacity:1" />
-                            <stop offset="100%" style="stop-color:#9334ea; stop-opacity:1" />
+                            <stop offset="0%" style="stop-color:#6496ff" />
+                            <stop offset="100%" style="stop-color:#9334ea" />
                         </linearGradient>
                     </defs>
                 </svg>
             </div>
         </div>
 
+        <!-- Live Feed Panel -->
         <div class="live-feed-panel">
             <div class="live-feed-title">
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="display:flex;align-items:center;gap:8px;">
                     <div class="live-feed-dot"></div>
                     Live Feed
                 </div>
 
                 <div class="live-feed-buttons">
                     <button class="live-feed-btn" onclick="saveProject()">💾 Save</button>
-                    <button class="live-feed-btn">📤 Upload</button>
+                    <button class="live-feed-btn" onclick="uploadProject()">📤 Upload</button>
                 </div>
             </div>
 
             <div class="live-feed-content">
-                <span>Waiting for input...</span>
+                <!-- CAMERA FEED -->
+                <img id="cameraFeed" src="" alt="Live Feed">
             </div>
         </div>
+
     </div>
 
     <script src="/Dashboard/js.js"></script>
