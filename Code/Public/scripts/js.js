@@ -3,73 +3,6 @@ function startCamera() {
     img.src = "http://127.0.0.1:5000/video";
 }
 window.onload = startCamera;
-
-
-
-
-
-/* ================= PROJECT FUNCTIONS ================= */
-function saveProject() {
-    const pipeline = Array.from(blocks.values()).map(b => b.type);
-
-    if (pipeline.length === 0) {
-        alert("Cannot save empty project");
-        return;
-    }
-
-    // 2️⃣ Ask for project name (simple for now)
-    const name = prompt("Enter project name:");
-    if (!name) return;
-
-    // 3️⃣ Send to backend
-        fetch('/user/projectsCreate', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            name,
-            pipeline
-        })
-    })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                updateLiveFeed(`Project "${name}" saved`);
-                window.location.reload();
-            } else {
-                alert(data.message || "Failed to save project");
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            alert("Server error while saving project");
-        });
-}
-
-/* 🔥 SEND PIPELINE TO BACKEND */
-function uploadProject() {
-
-    // 🔹 Collect pipeline from blocks (current simple order)
-    const pipeline = Array.from(blocks.values()).map(b => b.type);
-
-    fetch("http://127.0.0.1:5000/set_pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pipeline })
-    })
-        .then(res => res.json())
-        .then(data => {
-            updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
-            console.log("Backend pipeline:", data.pipeline);
-        })
-        .catch(err => {
-            console.error(err);
-            updateLiveFeed("Backend not running");
-        });
-}
-
-
 /* ================= CANVAS SYSTEM ================= */
 const canvas = document.getElementById('canvas');
 const svg = document.getElementById('connectionSvg');
@@ -141,6 +74,7 @@ function createBlock(type, x, y) {
 
     makeBlockDraggable(id);
     updateLiveFeed(`Added ${type} block`);
+    return  id;
 }
 
 
@@ -312,6 +246,68 @@ function updateLiveFeed(msg) {
 
 updateLiveFeed('System ready');
 
+/* ================= PROJECT FUNCTIONS ================= */
+function saveProject() {
+    const pipeline = Array.from(blocks.values()).map(b => b.type);
+
+    if (pipeline.length === 0) {
+        alert("Cannot save empty project");
+        return;
+    }
+
+    // 2️⃣ Ask for project name (simple for now)
+    const name = prompt("Enter project name:");
+    if (!name) return;
+
+    // 3️⃣ Send to backend
+        fetch('/user/projectsCreate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            name,
+            pipeline
+        })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                updateLiveFeed(`Project "${name}" saved`);
+                window.location.reload();
+            } else {
+                alert(data.message || "Failed to save project");
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Server error while saving project");
+        });
+}
+
+/* 🔥 SEND PIPELINE TO BACKEND */
+function uploadProject() {
+
+    // 🔹 Collect pipeline from blocks (current simple order)
+    const pipeline = Array.from(blocks.values()).map(b => b.type);
+
+    fetch("http://127.0.0.1:5000/set_pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipeline })
+    })
+        .then(res => res.json())
+        .then(data => {
+            updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
+            console.log("Backend pipeline:", data.pipeline);
+        })
+        .catch(err => {
+            console.error(err);
+            updateLiveFeed("Backend not running");
+        });
+}
+
+
 function loadProjects() {
   fetch('/user/Getprojects')
     .then(res => res.json())
@@ -365,11 +361,36 @@ function renderProjectBlocks(pipeline) {
   let x = 100;
   let y = 200;
 
+  const orderedBlockIds = [];
+
   pipeline.forEach(type => {
-    console.log("Creating block:", type);
-    createBlock(type, x, y);
+    const blockId = createBlock(type, x, y);
+    orderedBlockIds.push(blockId);
     x += 300;
   });
+
+  // 🔥 IMPORTANT: wait for DOM paint before linking
+  requestAnimationFrame(() => {
+    autoConnectBlocksInOrder(orderedBlockIds);
+    updateConnections(); // 👈 FORCE redraw
+  });
+}
+
+
+function autoConnectBlocksInOrder(orderedBlockIds) {
+    // remove old connections
+    connections.length = 0;
+
+    for (let i = 0; i < orderedBlockIds.length - 1; i++) {
+        const fromId = orderedBlockIds[i];
+        const toId = orderedBlockIds[i + 1];
+
+        if (blocks.has(fromId) && blocks.has(toId)) {
+            createConnection(fromId, toId);
+        }
+    }
+
+    updateConnections();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
