@@ -1,5 +1,5 @@
 function startCamera() {
-    const img = document.getElementById("cameraFeed");
+    const img = document.getElementById("live-feed");
     img.src = "http://127.0.0.1:5000/video";
 }
 window.onload = startCamera;
