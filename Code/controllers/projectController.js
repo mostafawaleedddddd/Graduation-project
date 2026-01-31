@@ -15,7 +15,8 @@ async function createProject(req, res) {
 
     const project = new Project({
       name,
-      pipeline: pipeline || []
+      pipeline: pipeline || [],
+      owner: req.session.user._id
     });
 
     await project.save();
@@ -26,6 +27,14 @@ async function createProject(req, res) {
     });
 
   } catch (err) {
+    // 🎯 Duplicate name for same user
+    if (err.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "You already have a project with this name"
+      });
+    }
+
     console.error(err);
     res.status(500).json({ success: false, message: 'Failed to create project' });
   }
@@ -38,7 +47,9 @@ async function getUserProjects(req, res) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const projects = await Project.find().sort({ createdAt: -1 });
+    const projects = await Project.find({
+      owner: req.session.user._id
+    }).sort({ createdAt: -1 });
 
     res.json({
       success: true,
@@ -60,7 +71,10 @@ async function getProjectById(req, res) {
 
     const { projectId } = req.params;
 
-    const project = await Project.findById(projectId);
+    const project = await Project.findOne({
+      _id: projectId,
+      owner: req.session.user._id
+    });
 
     if (!project) {
       return res.status(404).json({ success: false, message: 'Project not found' });

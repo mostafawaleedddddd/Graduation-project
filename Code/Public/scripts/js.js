@@ -36,6 +36,7 @@ function saveProject() {
         .then(data => {
             if (data.success) {
                 updateLiveFeed(`Project "${name}" saved`);
+                window.location.reload();
             } else {
                 alert(data.message || "Failed to save project");
             }
@@ -266,6 +267,7 @@ function updateConnections() {
     connections.forEach(c => {
         const a = getPortPosition(c.from, c.fromPort);
         const b = getPortPosition(c.to, c.toPort);
+        console.log(b, a);
         const midX = (a.x + b.x) / 2;
 
         const path = document.createElementNS(
@@ -310,8 +312,68 @@ function updateLiveFeed(msg) {
 
 updateLiveFeed('System ready');
 
+function loadProjects() {
+  fetch('/user/Getprojects')
+    .then(res => res.json())
+    .then(data => {
+      console.log("Projects response:", data);
+
+      if (!data.success) {
+        alert("Failed to load projects");
+        return;
+      }
+
+      const select = document.getElementById('projectSelect');
+
+      data.projects.forEach(project => {
+        const opt = document.createElement('option');
+        opt.value = project._id;
+        opt.textContent = project.name;
+        select.appendChild(opt);
+      });
+    })
+    .catch(err => {
+      console.error("Fetch projects error:", err);
+    });
+}
+function loadProject(projectId) {
+  fetch(`/user/projects/${projectId}`)
+    .then(res => res.json())
+    .then(data => {
+      console.log("Loaded project:", data);
+
+      if (!data.success) {
+        alert("Failed to load project");
+        return;
+      }
+
+      renderProjectBlocks(data.project.pipeline);
+    })
+    .catch(err => console.error(err));
+}
+function clearCanvasOnly() {
+  blocks.forEach(b => b.element.remove());
+  blocks.clear();
+  connections.length = 0;
+  blockCount = 0;
+}
+function renderProjectBlocks(pipeline) {
+  console.log("Rendering pipeline:", pipeline);
+
+  clearCanvasOnly();
+
+  let x = 100;
+  let y = 200;
+
+  pipeline.forEach(type => {
+    console.log("Creating block:", type);
+    createBlock(type, x, y);
+    x += 300;
+  });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
+      loadProjects();
     const dropdown = document.getElementById('projectSelect');
     if (!dropdown) return;
 
@@ -347,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
     dropdown.addEventListener('change', () => {
         const projectId = dropdown.value;
         if (!projectId) return;
-
+        loadProject(projectId);
         console.log('Selected project:', projectId);
 
         // Save selection (used later for Flask pipeline)

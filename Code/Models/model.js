@@ -17,9 +17,22 @@ const projectSchema = new Schema(
         "Tracking"
       ],
       default: []
+    },
+
+    owner: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true
     }
   },
   { timestamps: true }
 );
-const Project=mongoose.model('Project',projectSchema);
+
+/* 🔐 USER-SCOPED UNIQUENESS */
+projectSchema.index(
+  { name: 1, owner: 1 },
+  { unique: true }
+);
+
+const Project = mongoose.model("Project", projectSchema);
 module.exports = { Project, projectSchema };
