@@ -464,3 +464,16 @@ svg {
   font-size: 11px;
   cursor: pointer;
 }
+
+.logout-btn {
+  background: #d9534f;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.logout-btn:hover {
+  background: #c9302c;
+}
+

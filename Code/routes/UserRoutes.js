@@ -18,4 +18,15 @@ router.post('/projectsCreate', projectController.createProject);
 router.get('/Getprojects', projectController.getUserProjects);
 router.get('/projects/:projectId', projectController.getProjectById);
 router.delete('/projects/:projectId', projectController.deleteProject);
+router.post('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ success: false });
+    }
+
+    res.clearCookie('connect.sid'); // important
+    res.json({ success: true });
+  });
+});
 module.exports = router;

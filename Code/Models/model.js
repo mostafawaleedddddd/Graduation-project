@@ -14,7 +14,8 @@ const projectSchema = new Schema(
       enum: [
         "Color Detection",
         "Object Detection",
-        "Tracking"
+        "Tracking",
+        "Object Counting"
       ],
       default: []
     },

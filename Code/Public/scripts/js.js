@@ -307,6 +307,31 @@ function uploadProject() {
         });
 }
 
+//----------------- LOGOUT FUNCTIONALITY ----------------//
+const logoutBtn = document.getElementById("logoutBtn");
+
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/user/logout", {
+        method: "POST",
+        credentials: "include"
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        window.location.href = "/"; // or "/"
+      } else {
+        alert("Logout failed");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Server error during logout");
+    }
+  });
+}
+
 
 function loadProjects() {
   fetch('/user/Getprojects')
