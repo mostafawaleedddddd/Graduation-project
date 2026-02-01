@@ -4,6 +4,8 @@ import cv2
 import threading
 import time
 from ultralytics import YOLO
+from color_detection_pi import apply_color_detection
+from human_tracking import HumanTracker
 
 # ================== APP SETUP ==================
 app = Flask(__name__)
@@ -11,7 +13,7 @@ CORS(app)
 
 # ================== MODELS ==================
 model = YOLO("yolov8s.pt")
-
+human_tracker = HumanTracker()
 # ================== PIPELINE ==================
 pipeline = []   # ["Color Detection", "Object Detection", "Tracking"]
 
@@ -70,25 +72,10 @@ def processing_loop():
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
             elif step == "Tracking":
-                results = model.track(frame, persist=True)
-                for box in results[0].boxes:
-                    if box.id is None:
-                        continue
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    tid = int(box.id)
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(
-                        frame,
-                        f"ID {tid}",
-                        (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 0),
-                        2
-                    )
+                frame = human_tracker.process(frame)
 
             elif step == "Color Detection":
-                pass  # hook your module here
+                frame = apply_color_detection(frame)
 
         with lock:
             processed_frame = frame

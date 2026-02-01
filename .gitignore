@@ -972,3 +972,4 @@ node_modules/wrappy/README.md
 node_modules/wrappy/wrappy.js
 Code/Media/background.mp4
 /Code/Public/python/modules
+/Code/Public/python/__pycache__
