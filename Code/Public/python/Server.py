@@ -8,6 +8,9 @@ from color_detection_pi import apply_color_detection
 from human_tracking import HumanTracker
 from object_countingtry import ObjectCounterBlock
 from two_models import DualModelObjectCounter
+from shelf_gap_detect_images import ShelfGapDetector
+
+
 
 
 
@@ -20,6 +23,7 @@ model = YOLO("yolov8s.pt")
 human_tracker = HumanTracker()
 object_counter = ObjectCounterBlock()
 dual_counter = DualModelObjectCounter()
+gap_detector = ShelfGapDetector()
 # ================== PIPELINE ==================
 pipeline = []   # ["Color Detection", "Object Detection", "Tracking"]
 
@@ -83,9 +87,11 @@ def processing_loop():
             elif step == "Color Detection":
                 frame = apply_color_detection(frame)
                 
-            elif step == "Object Counting":
+            elif step == "  ":
                 frame = object_counter.process(frame)
-
+                
+            elif step == "Gap Detection":
+                frame = gap_detector.process(frame)
         with lock:
             processed_frame = frame
 

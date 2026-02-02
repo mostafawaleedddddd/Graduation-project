@@ -15,7 +15,8 @@ const projectSchema = new Schema(
         "Color Detection",
         "Object Detection",
         "Tracking",
-        "Object Counting"
+        "Object Counting",
+        "Gap Detection"
       ],
       default: []
     },
