@@ -50,6 +50,11 @@ body {
     -webkit-text-fill-color: transparent;
     letter-spacing: 0.5px;
 }
+.navbar-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
 
 /* Buttons */
 .navbar-btn {
