@@ -153,21 +153,33 @@ document.addEventListener("DOMContentLoaded", () => {
     })
       .then(res => res.json())
       .then(data => {
-        if (data.success) {
-          // account already exists
-          alert(data.message || 'Account already exists');
-        } else {
-          // account does not exist → create it
-          createUser(fullName, email, password);
-        }
-      })
+          if (data.success) {
+            showError(data.message || 'This Account already exists.');
+          } else {
+            createUser(fullName, email, password);
+          }
+        })
       .catch(err => {
         console.error(err);
-        alert('Something went wrong.');
+        showError('Something went wrong. Please try again.');
       });
 
   });
 });
+document.getElementById('close-modal').addEventListener('click', closeModal);
+// If you have an 'OK' button with a specific ID or class:
+document.querySelector('.modal-btn').addEventListener('click', closeModal);
+function showError(message) {
+  const modal = document.getElementById('error-modal');
+  const msgElement = document.getElementById('modal-message');
+  msgElement.textContent = message;
+  modal.classList.remove('hidden');
+}
+function closeModal() {
+  const modal = document.getElementById('error-modal');
+  modal.classList.add('hidden');
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const loginForm = document.getElementById('login-form');
   if (!loginForm) return;

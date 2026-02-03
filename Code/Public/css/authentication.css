@@ -125,7 +125,7 @@ body {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .password-popup li {
@@ -180,4 +180,86 @@ body {
 
 .hidden {
   display: none;
+}
+
+
+
+
+/* ERROR MODAL STYLES */
+
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 20, 0.85);
+  display: flex; 
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  border-radius: 14px;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: #1e1e2f;
+  width: 80%;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+.modal-header {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px 15px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: #aaa;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.error-icon {
+  width: 18px;
+  margin-right: 10px;
+}
+
+.close-x {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 25px 20px;
+  text-align: center;
+}
+
+.modal-body p {
+  font-size: 15px;
+  color: #e0e0e0;
+  margin: 0 !important; /* Overriding your existing p margin */
+}
+
+.modal-footer {
+  padding: 12px;
+  text-align: right;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.modal-btn {
+  padding: 8px 25px;
+  background: #6496ff;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.modal-btn:hover {
+  background: #4a6fb5;
 }

@@ -79,6 +79,24 @@
 
       <button type="submit" class="submit-btn">Sign Up</button>
     </form>
+    
+
+
+      <div id="error-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <img src="https://cdn-icons-png.flaticon.com/512/564/564619.png" alt="Warning" class="error-icon">
+            <span>System Message</span>
+            <button id="close-modal" class="close-x">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p id="modal-message">The specified account already exists.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="modal-btn" onclick="document.getElementById('error-modal').classList.add('hidden')">OK</button>
+          </div>
+        </div>
+      </div>
 
   </div>
 
