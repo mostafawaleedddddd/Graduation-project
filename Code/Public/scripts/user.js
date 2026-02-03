@@ -166,9 +166,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   });
 });
-document.getElementById('close-modal').addEventListener('click', closeModal);
-// If you have an 'OK' button with a specific ID or class:
-document.querySelector('.modal-btn').addEventListener('click', closeModal);
+
+
 function showError(message) {
   const modal = document.getElementById('error-modal');
   const msgElement = document.getElementById('modal-message');
