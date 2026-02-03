@@ -30,11 +30,11 @@ const projectSchema = new Schema(
   { timestamps: true }
 );
 
-/* 🔐 USER-SCOPED UNIQUENESS */
+/* 🔐 UNIQUE PER USER */
 projectSchema.index(
   { name: 1, owner: 1 },
   { unique: true }
 );
 
 const Project = mongoose.model("Project", projectSchema);
-module.exports = { Project, projectSchema };
+module.exports = Project;

@@ -87,7 +87,7 @@ def processing_loop():
             elif step == "Color Detection":
                 frame = apply_color_detection(frame)
                 
-            elif step == "  ":
+            elif step == "Object Counting":
                 frame = object_counter.process(frame)
                 
             elif step == "Gap Detection":

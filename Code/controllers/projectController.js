@@ -1,6 +1,7 @@
-const { Project } = require('../Models/model');
+const  Project  = require('../Models/model');
+console.log(Project);
 
-/* ================= CREATE PROJECT ================= */
+
 async function createProject(req, res) {
   try {
     if (!req.session.user) {
@@ -20,14 +21,13 @@ async function createProject(req, res) {
     });
 
     await project.save();
-
+    
     res.status(201).json({
       success: true,
       project
     });
 
   } catch (err) {
-    // 🎯 Duplicate name for same user
     if (err.code === 11000) {
       return res.status(409).json({
         success: false,
@@ -100,7 +100,10 @@ async function deleteProject(req, res) {
 
     const { projectId } = req.params;
 
-    const deleted = await Project.findByIdAndDelete(projectId);
+    const deleted = await Project.findOneAndDelete({
+      _id: projectId,
+      owner: req.session.user._id   // 🔐 FIX
+    });
 
     if (!deleted) {
       return res.status(404).json({ success: false, message: 'Project not found' });
@@ -113,6 +116,7 @@ async function deleteProject(req, res) {
     res.status(500).json({ success: false, message: 'Failed to delete project' });
   }
 }
+
 
 module.exports = {
   createProject,
