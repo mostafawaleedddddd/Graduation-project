@@ -286,27 +286,28 @@ function saveProject() {
 }
 
 /* 🔥 SEND PIPELINE TO BACKEND */
-function uploadProject() {
+async function uploadProject() {
+    try {
+        const pipeline = Array.from(blocks.values()).map(b => b.type);
 
-    // 🔹 Collect pipeline from blocks (current simple order)
-    const pipeline = Array.from(blocks.values()).map(b => b.type);
-
-    fetch("http://127.0.0.1:5000/set_pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pipeline })
-    })
-        .then(res => res.json())
-        .then(data => {
-            updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
-            console.log("Backend pipeline:", data.pipeline);
-        })
-        .catch(err => {
-            console.error(err);
-            updateLiveFeed("Backend not running");
+        const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pipeline })
         });
-}
 
+        if (!response.ok) throw new Error("Server error");
+
+        const data = await response.json();
+
+        updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
+        console.log("Backend pipeline:", data.pipeline);
+
+    } catch (err) {
+        console.error(err);
+        updateLiveFeed("Backend not running");
+    }
+}
 //----------------- LOGOUT FUNCTIONALITY ----------------//
 const logoutBtn = document.getElementById("logoutBtn");
 

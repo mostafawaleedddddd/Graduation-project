@@ -4,6 +4,7 @@ import cv2
 import threading
 import time
 from ultralytics import YOLO
+
 from color_detection_pi import apply_color_detection
 from human_tracking import HumanTracker
 from object_countingtry import ObjectCounterBlock
@@ -11,132 +12,151 @@ from two_models import DualModelObjectCounter
 from shelf_gap_detect_images import ShelfGapDetector
 
 
+class LiveStreamServer:
 
+    def __init__(self):
+        # ================== APP SETUP ==================
+        self.app = Flask(__name__)
+        CORS(self.app)
 
+        # ================== MODELS ==================
+        self.model = YOLO("yolov8s.pt")
+        self.human_tracker = HumanTracker()
+        self.object_counter = ObjectCounterBlock()
+        self.dual_counter = DualModelObjectCounter()
+        self.gap_detector = ShelfGapDetector()
 
-# ================== APP SETUP ==================
-app = Flask(__name__)
-CORS(app)
+        # ================== PIPELINE ==================
+        self.pipeline = []
 
-# ================== MODELS ==================
-model = YOLO("yolov8s.pt")
-human_tracker = HumanTracker()
-object_counter = ObjectCounterBlock()
-dual_counter = DualModelObjectCounter()
-gap_detector = ShelfGapDetector()
-# ================== PIPELINE ==================
-pipeline = []   # ["Color Detection", "Object Detection", "Tracking"]
+        # ================== CAMERA CONFIG ==================
+        self.CAMERA_INDEX = 0
+        self.FRAME_WIDTH = 1280
+        self.FRAME_HEIGHT = 720
+        self.FPS = 30
 
-# ================== CAMERA CONFIG ==================
-CAMERA_INDEX = 0
-FRAME_WIDTH = 1280
-FRAME_HEIGHT = 720
-FPS = 30
+        # ================== SHARED STATE ==================
+        self.raw_frame = None
+        self.processed_frame = None
+        self.lock = threading.Lock()
+        self.running = True
 
-# ================== SHARED STATE ==================
-raw_frame = None
-processed_frame = None
-lock = threading.Lock()
-running = True
+        # ================== ROUTES ==================
+        self.setup_routes()
 
-# ================== CAMERA THREAD ==================
-def camera_loop():
-    global raw_frame
-    cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
-    cap.set(cv2.CAP_PROP_FPS, FPS)
-
-    if not cap.isOpened():
-        raise RuntimeError("❌ Camera not opened")
-
-    print("✅ Camera started")
-
-    while running:
-        ret, frame = cap.read()
-        if not ret:
-            continue
-        with lock:
-            raw_frame = frame.copy()
-
-    cap.release()
-
-# ================== PIPELINE PROCESSOR THREAD ==================
-def processing_loop():
-    global processed_frame
-
-    while running:
-        with lock:
-            if raw_frame is None:
-                continue
-            frame = raw_frame.copy()
-
-        # === APPLY PIPELINE IN ORDER ===
-        for step in pipeline:
-
-            if step == "Object Detection":
-                results = model(frame, conf=0.4)
-                for box in results[0].boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-
-            elif step == "Tracking":
-                frame = human_tracker.process(frame)
-
-            elif step == "Color Detection":
-                frame = apply_color_detection(frame)
-                
-            elif step == "Object Counting":
-                frame = object_counter.process(frame)
-                
-            elif step == "Gap Detection":
-                frame = gap_detector.process(frame)
-        with lock:
-            processed_frame = frame
-
-        time.sleep(1 / FPS)
-
-# ================== VIDEO STREAM ==================
-def generate_frames():
-    while True:
-        with lock:
-            frame = processed_frame
-
-        if frame is None:
-            continue
-
-        _, buffer = cv2.imencode(".jpg", frame)
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" +
-            buffer.tobytes() +
-            b"\r\n"
+        # ================== THREADS ==================
+        self.camera_thread = threading.Thread(
+            target=self.camera_loop, daemon=True
+        )
+        self.processor_thread = threading.Thread(
+            target=self.processing_loop, daemon=True
         )
 
-@app.route("/video")
-def video():
-    return Response(
-        generate_frames(),
-        mimetype="multipart/x-mixed-replace; boundary=frame"
-    )
+        self.camera_thread.start()
+        self.processor_thread.start()
 
-# ================== PIPELINE API ==================
-@app.route("/set_pipeline", methods=["POST"])
-def set_pipeline():
-    global pipeline
-    pipeline = request.json.get("pipeline", [])
-    print("PIPELINE UPDATED:", pipeline)
-    return jsonify({"status": "ok", "pipeline": pipeline})
+    # ================== CAMERA THREAD ==================
+    def camera_loop(self):
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
-# ================== START THREADS ==================
-camera_thread = threading.Thread(target=camera_loop, daemon=True)
-processor_thread = threading.Thread(target=processing_loop, daemon=True)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.FRAME_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.FRAME_HEIGHT)
+        cap.set(cv2.CAP_PROP_FPS, self.FPS)
 
-camera_thread.start()
-processor_thread.start()
+        if not cap.isOpened():
+            raise RuntimeError("❌ Camera not opened")
 
-# ================== RUN ==================
+        print("✅ Camera started")
+
+        while self.running:
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            with self.lock:
+                self.raw_frame = frame.copy()
+
+        cap.release()
+
+    # ================== PROCESSING THREAD ==================
+    def processing_loop(self):
+        while self.running:
+
+            with self.lock:
+                if self.raw_frame is None:
+                    continue
+                frame = self.raw_frame.copy()
+
+            for step in self.pipeline:
+
+                if step == "Object Detection":
+                    results = self.model(frame, conf=0.4)
+                    for box in results[0].boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
+                elif step == "Tracking":
+                    frame = self.human_tracker.process(frame)
+
+                elif step == "Color Detection":
+                    frame = apply_color_detection(frame)
+
+                elif step == "Object Counting":
+                    frame = self.object_counter.process(frame)
+
+                elif step == "Gap Detection":
+                    frame = self.gap_detector.process(frame)
+
+            with self.lock:
+                self.processed_frame = frame
+
+            time.sleep(1 / self.FPS)
+
+    # ================== STREAM GENERATOR ==================
+    def generate_frames(self):
+        while True:
+            with self.lock:
+                frame = self.processed_frame
+
+            if frame is None:
+                continue
+
+            _, buffer = cv2.imencode(".jpg", frame)
+
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" +
+                buffer.tobytes() +
+                b"\r\n"
+            )
+
+    # ================== ROUTES ==================
+    def setup_routes(self):
+
+        @self.app.route("/video")
+        def video():
+            return Response(
+                self.generate_frames(),
+                mimetype="multipart/x-mixed-replace; boundary=frame"
+            )
+
+        @self.app.route("/set_pipeline", methods=["POST"])
+        def set_pipeline():
+            self.pipeline = request.json.get("pipeline", [])
+            print("PIPELINE UPDATED:", self.pipeline)
+            return jsonify({"status": "ok", "pipeline": self.pipeline})
+
+    # ================== RUN SERVER ==================
+    def run(self):
+        print("🚀 Server running")
+        self.app.run(
+            host="127.0.0.1",
+            port=5000,
+            debug=False,
+            use_reloader=False
+        )
+    
+
 if __name__ == "__main__":
-    print("🚀 Server running")
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    server = LiveStreamServer()
+    server.run()

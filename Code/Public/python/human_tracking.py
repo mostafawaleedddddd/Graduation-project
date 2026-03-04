@@ -23,11 +23,6 @@ class HumanTracker:
         self.next_reid_id = 1
 
     def process(self, frame):
-        """
-        Run human detection + tracking + ReID on a single frame.
-        Returns the annotated frame.
-        """
-
         results = self.model.track(
             frame,
             persist=True,
