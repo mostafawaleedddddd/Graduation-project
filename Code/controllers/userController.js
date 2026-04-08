@@ -77,8 +77,90 @@ async function checkCredentials(req, res) {
     res.json({ success: false, message: "Account does not exist" });
   }
 }
+async function addCamera(req, res) {
+  try {
+    console.log("REQ BODY:", req.body);
+    console.log("TYPE OF NAME:", typeof req.body.name);
+    const { name, url } = req.body;
+    
+    if (!name || !url) {
+      return res.json({ success: false, message: "Name and URL required" });
+    }
+
+    const userId = req.session.user._id;
+
+    const user = await users.findById(userId);
+
+    if (!user) {
+      return res.json({ success: false, message: "User not found" });
+    }
+
+    // 🔥 add/update camera
+    user.cameras.set(name, url);
+
+    await user.save();
+
+    res.json({ success: true, message: "Camera added successfully" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+async function getCameras(req, res) {
+  try {
+    const userId = req.session.user._id;
+
+    const user = await users.findById(userId);
+
+    if (!user) {
+      return res.json({ success: false, message: "User not found" });
+    }
+
+    res.json({
+      success: true,
+      cameras: user.cameras
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+async function getCameraByName(req, res) {
+  try {
+    const { name } = req.params;
+
+    const userId = req.session.user._id;
+
+    const user = await users.findById(userId);
+
+    if (!user) {
+      return res.json({ success: false, message: "User not found" });
+    }
+
+    const cameraUrl = user.cameras.get(name);
+
+    if (!cameraUrl) {
+      return res.json({ success: false, message: "Camera not found" });
+    }
+
+    res.json({
+      success: true,
+      name,
+      url: cameraUrl
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
 module.exports = {
   login,
   checkCredentials,
-  addUser
+  addUser,
+  addCamera,
+  getCameras,
+  getCameraByName
 };

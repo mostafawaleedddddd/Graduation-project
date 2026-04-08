@@ -18,6 +18,9 @@ router.post('/projectsCreate', projectController.createProject);
 router.get('/Getprojects', projectController.getUserProjects);
 router.get('/projects/:projectId', projectController.getProjectById);
 router.delete('/projects/:projectId', projectController.deleteProject);
+router.post('/addCamera', user.addCamera);
+router.get('/getCameras', user.getCameras);
+router.get('/getCamera/:name', user.getCameraByName);
 router.post('/logout', (req, res) => {
   req.session.destroy(err => {
     if (err) {

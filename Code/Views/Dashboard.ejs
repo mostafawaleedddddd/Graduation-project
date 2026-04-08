@@ -19,11 +19,11 @@
         </div>
 
         <div class="navbar-right">
-    <div class="navbar-logo">
-        <img src="/materials/logo.png" alt="ModuVision Logo" draggable="false">
-    </div>
-    <button id="logoutBtn" class="logout-btn">Logout</button>
-</div>
+            <div class="navbar-logo">
+                <img src="/materials/logo.png" alt="ModuVision Logo" draggable="false">
+            </div>
+            <button id="logoutBtn" class="logout-btn">Logout</button>
+        </div>
     </div>
 
     <div class="container">
@@ -49,10 +49,10 @@
             </div>
             <div class="functionality" draggable="true" data-type="Object Counting">
                 🔢 Object Counting</div>
-                <div class="functionality" draggable="true" data-type="Gap Detection">
+            <div class="functionality" draggable="true" data-type="Gap Detection">
                 🧱 Gap Detection</div>
         </div>
-        
+
 
         <!-- Canvas -->
         <div class="canvas-wrapper">
@@ -77,6 +77,11 @@
                 </div>
 
                 <div class="live-feed-buttons">
+                    <select id="cameraSelect" class="live-feed-select">
+                        <option value="">Select Camera</option>
+                    </select>
+
+                    <button class="live-feed-btn" onclick="openAddCamera()">➕ Add</button>
                     <button class="live-feed-btn" onclick="saveProject()">💾 Save</button>
                     <button class="live-feed-btn" onclick="uploadProject()">📤 Upload</button>
                 </div>
@@ -90,7 +95,17 @@
         </div>
 
     </div>
+    <div id="cameraModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>Add IP Camera</h3>
 
+            <input type="text" id="cameraName" placeholder="Camera Name"><br><br>
+            <input type="text" id="cameraUrl" placeholder="RTSP / HTTP URL"><br><br>
+
+            <button onclick="addCamera()">Add Camera</button>
+            <button onclick="closeAddCamera()">Cancel</button>
+        </div>
+    </div>
     <script src="/scripts/js.js"></script>
 </body>
 

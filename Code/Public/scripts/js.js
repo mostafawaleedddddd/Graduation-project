@@ -1,6 +1,61 @@
+let cameras = [];
+function openAddCamera() {
+    document.getElementById("cameraModal").style.display = "block";
+}
+
+function closeAddCamera() {
+    document.getElementById("cameraModal").style.display = "none";
+}
+function addCamera() {
+    const name = document.getElementById("cameraName").value;
+    const url = document.getElementById("cameraUrl").value;
+
+    if (!name || !url) {
+        alert("Enter camera name and URL");
+        return;
+    }
+
+    cameras.push({ name, url });
+    fetch('/user/addCamera', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+            },
+        body: JSON.stringify({
+            name: name,
+            url: url
+        })
+    });
+    const select = document.getElementById("cameraSelect");
+
+    const option = document.createElement("option");
+    option.value = url;
+    option.textContent = name;
+
+    select.appendChild(option);
+
+    closeAddCamera();
+}
+document.getElementById("cameraSelect").addEventListener("change", async function () {
+    const url = this.value;
+
+    if (!url) return;
+
+    // tell backend to switch camera
+    await fetch("http://127.0.0.1:5000/set_camera", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ url })
+    });
+
+    // refresh stream
+    startCamera();
+});
 function startCamera() {
     const img = document.getElementById("live-feed");
-    img.src = "http://127.0.0.1:5000/video";
+    img.src = "http://127.0.0.1:5000/video?" + new Date().getTime();
 }
 window.onload = startCamera;
 /* ================= CANVAS SYSTEM ================= */
@@ -423,7 +478,18 @@ document.addEventListener('DOMContentLoaded', () => {
       loadProjects();
     const dropdown = document.getElementById('projectSelect');
     if (!dropdown) return;
+    fetch('/user/getCameras')
+        .then(res => res.json())
+        .then(data => {
+        const select = document.getElementById("cameraSelect");
 
+        for (let name in data.cameras) {
+            const option = document.createElement("option");
+            option.value = data.cameras[name];
+            option.textContent = name;
+            select.appendChild(option);
+        }
+        });
     fetch('/user/Getprojects')
         .then(res => {
             if (!res.ok) throw new Error('Failed to fetch projects');

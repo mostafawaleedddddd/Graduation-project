@@ -30,10 +30,11 @@ class LiveStreamServer:
         self.pipeline = []
 
         # ================== CAMERA CONFIG ==================
-        self.CAMERA_INDEX = 0
+        self.camera_source = 0   # default (can still use webcam)
+        self.cap = None
         self.FRAME_WIDTH = 1280
         self.FRAME_HEIGHT = 720
-        self.FPS = 30
+        self.FPS = 20
 
         # ================== SHARED STATE ==================
         self.raw_frame = None
@@ -57,26 +58,42 @@ class LiveStreamServer:
 
     # ================== CAMERA THREAD ==================
     def camera_loop(self):
-        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.FRAME_WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.FRAME_HEIGHT)
-        cap.set(cv2.CAP_PROP_FPS, self.FPS)
-
-        if not cap.isOpened():
-            raise RuntimeError("❌ Camera not opened")
-
-        print("✅ Camera started")
 
         while self.running:
-            ret, frame = cap.read()
+
+            if self.cap is None:
+                print(f"🎥 Connecting to camera: {self.camera_source}")
+
+                if str(self.camera_source).startswith("rtsp://"):
+                    self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
+                else:
+                    self.cap = cv2.VideoCapture(self.camera_source)
+
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+                if not self.cap.isOpened():
+                    print("❌ Failed to open camera")
+                    self.cap = None
+                    time.sleep(0.5)
+                    continue
+
+        # 🔥 drop buffered frames
+            ret = False
+            frame = None
+            for _ in range(3):
+                ret, frame = self.cap.read()
+
             if not ret:
+                print("⚠️ Frame read failed, reconnecting...")
+                self.cap.release()
+                self.cap = None
                 continue
+
+            # 🔥 resize for performance
+            frame = cv2.resize(frame, (640, 480))
 
             with self.lock:
                 self.raw_frame = frame.copy()
-
-        cap.release()
 
     # ================== PROCESSING THREAD ==================
     def processing_loop(self):
@@ -145,6 +162,21 @@ class LiveStreamServer:
             self.pipeline = request.json.get("pipeline", [])
             print("PIPELINE UPDATED:", self.pipeline)
             return jsonify({"status": "ok", "pipeline": self.pipeline})
+        @self.app.route("/set_camera", methods=["POST"])
+        def set_camera():
+            data = request.json
+            new_url = data.get("url")
+
+            print("Switching camera to:", new_url)
+
+            self.camera_source = new_url
+
+            # reset camera
+            if self.cap:
+                self.cap.release()
+                self.cap = None
+
+            return jsonify({"status": "camera updated"})
 
     # ================== RUN SERVER ==================
     def run(self):
