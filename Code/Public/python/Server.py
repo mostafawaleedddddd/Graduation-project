@@ -1,6 +1,6 @@
+import cv2
 from flask import Flask, Response, request, jsonify
 from flask_cors import CORS
-import cv2
 import threading
 import time
 from ultralytics import YOLO
@@ -10,12 +10,15 @@ from human_tracking import HumanTracker
 from object_countingtry import ObjectCounterBlock
 from two_models import DualModelObjectCounter
 from shelf_gap_detect_images import ShelfGapDetector
+from attendence import AttendanceSystem
+from car_parking import ParkingManagementBlock
 
 
 class LiveStreamServer:
 
     def __init__(self):
-        # ================== APP SETUP ==================
+
+        # ================== APP ==================
         self.app = Flask(__name__)
         CORS(self.app)
 
@@ -25,85 +28,119 @@ class LiveStreamServer:
         self.object_counter = ObjectCounterBlock()
         self.dual_counter = DualModelObjectCounter()
         self.gap_detector = ShelfGapDetector()
+        self.attendance = AttendanceSystem()
+        self.parking_model = ParkingManagementBlock()
 
         # ================== PIPELINE ==================
         self.pipeline = []
 
-        # ================== CAMERA CONFIG ==================
-        self.camera_source = 0   # default (can still use webcam)
+        # ================== CAMERA ==================
+        self.camera_source = 0
         self.cap = None
-        self.FRAME_WIDTH = 1280
-        self.FRAME_HEIGHT = 720
-        self.FPS = 20
 
-        # ================== SHARED STATE ==================
+        # ================== STATE ==================
         self.raw_frame = None
         self.processed_frame = None
         self.lock = threading.Lock()
+
         self.running = True
+        self.camera_thread = None
+
+        self.FPS = 20
 
         # ================== ROUTES ==================
         self.setup_routes()
 
-        # ================== THREADS ==================
+        # ================== START THREADS ==================
+        self.start_camera_thread()
+        threading.Thread(target=self.processing_loop, daemon=True).start()
+
+    # ================== START CAMERA THREAD ==================
+    def start_camera_thread(self):
         self.camera_thread = threading.Thread(
-            target=self.camera_loop, daemon=True
+            target=self.camera_loop,
+            daemon=True
         )
-        self.processor_thread = threading.Thread(
-            target=self.processing_loop, daemon=True
-        )
-
         self.camera_thread.start()
-        self.processor_thread.start()
 
-    # ================== CAMERA THREAD ==================
+    # ================== CAMERA LOOP ==================
     def camera_loop(self):
 
-        while self.running:
+        print("📷 Camera thread started")
 
+        while True:
+
+            # 🔴 PAUSE when switching camera
+            if not self.running:
+                time.sleep(0.1)
+                continue
+
+            # 🔁 CONNECT CAMERA
             if self.cap is None:
-                print(f"🎥 Connecting to camera: {self.camera_source}")
+                print(f"🎥 Connecting to: {self.camera_source}")
 
-                if str(self.camera_source).startswith("rtsp://"):
-                    self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
-                else:
-                    self.cap = cv2.VideoCapture(self.camera_source)
+                try:
+                    if str(self.camera_source).startswith("rtsp://"):
+                        self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
+                    else:
+                        self.cap = cv2.VideoCapture(self.camera_source)
 
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-                if not self.cap.isOpened():
-                    print("❌ Failed to open camera")
+                    if not self.cap.isOpened():
+                        print("❌ Failed to open camera")
+                        self.cap.release()
+                        self.cap = None
+                        time.sleep(1)
+                        continue
+
+                    print("✅ Camera connected")
+
+                except Exception as e:
+                    print("Camera error:", e)
                     self.cap = None
-                    time.sleep(0.5)
+                    time.sleep(1)
                     continue
 
-        # 🔥 drop buffered frames
+            # 🔥 READ FRAME (DROP BUFFER)
             ret = False
             frame = None
+
             for _ in range(3):
                 ret, frame = self.cap.read()
 
             if not ret:
-                print("⚠️ Frame read failed, reconnecting...")
-                self.cap.release()
+                print("⚠️ Frame failed → reconnecting...")
+
+                try:
+                    self.cap.release()
+                except:
+                    pass
+
                 self.cap = None
+                time.sleep(1)
                 continue
 
-            # 🔥 resize for performance
             frame = cv2.resize(frame, (640, 480))
 
             with self.lock:
                 self.raw_frame = frame.copy()
 
-    # ================== PROCESSING THREAD ==================
+    # ================== PROCESSING LOOP ==================
     def processing_loop(self):
-        while self.running:
+
+        while True:
+
+            if not self.running:
+                time.sleep(0.1)
+                continue
 
             with self.lock:
                 if self.raw_frame is None:
                     continue
                 frame = self.raw_frame.copy()
 
+            # 🔁 APPLY PIPELINE
             for step in self.pipeline:
 
                 if step == "Object Detection":
@@ -124,13 +161,20 @@ class LiveStreamServer:
                 elif step == "Gap Detection":
                     frame = self.gap_detector.process(frame)
 
+                elif step == "Attendance":
+                    frame = self.attendance.process(frame)
+
+                elif step == "Parking Management":
+                    frame = self.parking_model.process(frame)
+
             with self.lock:
                 self.processed_frame = frame
 
             time.sleep(1 / self.FPS)
 
-    # ================== STREAM GENERATOR ==================
+    # ================== STREAM ==================
     def generate_frames(self):
+
         while True:
             with self.lock:
                 frame = self.processed_frame
@@ -160,8 +204,10 @@ class LiveStreamServer:
         @self.app.route("/set_pipeline", methods=["POST"])
         def set_pipeline():
             self.pipeline = request.json.get("pipeline", [])
-            print("PIPELINE UPDATED:", self.pipeline)
-            return jsonify({"status": "ok", "pipeline": self.pipeline})
+            print("PIPELINE:", self.pipeline)
+            return jsonify({"status": "ok"})
+
+        # 🔥 FIXED CAMERA SWITCH (NO FREEZE)
         @self.app.route("/set_camera", methods=["POST"])
         def set_camera():
             data = request.json
@@ -169,25 +215,53 @@ class LiveStreamServer:
 
             print("Switching camera to:", new_url)
 
-            self.camera_source = new_url
+            # 🛑 STOP threads safely
+            self.running = False
+            time.sleep(0.5)
 
-            # reset camera
+            # 🔥 RELEASE camera
             if self.cap:
-                self.cap.release()
+                try:
+                    self.cap.release()
+                except:
+                    pass
                 self.cap = None
 
-            return jsonify({"status": "camera updated"})
+            # 🔄 CLEAR FRAMES
+            with self.lock:
+                self.raw_frame = None
+                self.processed_frame = None
 
-    # ================== RUN SERVER ==================
+            # 🔁 SET NEW CAMERA
+            self.camera_source = new_url
+
+            # ▶️ RESTART
+            self.running = True
+            self.start_camera_thread()
+
+            return jsonify({"status": "camera switched"})
+
+        # ✅ ATTENDANCE RESULTS
+        @self.app.route("/attendance_results")
+        def attendance_results():
+            return jsonify(self.attendance.get_results())
+
+        # ✅ RESET ATTENDANCE
+        @self.app.route("/reset_attendance")
+        def reset_attendance():
+            self.attendance.reset()
+            return jsonify({"status": "reset done"})
+
+    # ================== RUN ==================
     def run(self):
-        print("🚀 Server running")
+        print("🚀 Server running...")
         self.app.run(
             host="127.0.0.1",
             port=5000,
             debug=False,
             use_reloader=False
         )
-    
+
 
 if __name__ == "__main__":
     server = LiveStreamServer()

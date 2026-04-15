@@ -58,6 +58,26 @@ function startCamera() {
     img.src = "http://127.0.0.1:5000/video?" + new Date().getTime();
 }
 window.onload = startCamera;
+// window.onload = fetchAttendanceResults;
+//----------------- FETCH ATTENDANCE RESULTS ----------------//
+async function fetchAttendanceResults() {
+    try {
+        const response = await fetch("http://127.0.0.1:5000/attendance_results");
+
+        if (!response.ok) {
+            throw new Error("Failed to fetch attendance data");
+        }
+
+        const data = await response.json();
+
+        console.log("Attendance Data:", data);
+
+        displayAttendance(data);
+
+    } catch (error) {
+        console.error("Error:", error);
+    }
+}
 /* ================= CANVAS SYSTEM ================= */
 const canvas = document.getElementById('canvas');
 const svg = document.getElementById('connectionSvg');
