@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ModuVision</title>
     <link rel="stylesheet" href="/css/Dashboard.css">
+    <link rel="icon" href="/materials/logo2.png" type="image/x-icon">
 </head>
 
 <body>
@@ -101,15 +102,25 @@
         </div>
 
     </div>
-    <div id="cameraModal" class="modal" style="display:none;">
+
+    <div id="cameraModal" class="modal-overlay">
         <div class="modal-content">
+            <button class="close-btn" onclick="closeAddCamera()">&times;</button>
+
             <h3>Add IP Camera</h3>
 
-            <input type="text" id="cameraName" placeholder="Camera Name"><br><br>
-            <input type="text" id="cameraUrl" placeholder="RTSP / HTTP URL"><br><br>
+            <div class="input-group">
+                <input type="text" id="cameraName" placeholder="Camera Name">
+            </div>
 
-            <button onclick="addCamera()">Add Camera</button>
-            <button onclick="closeAddCamera()">Cancel</button>
+            <div class="input-group">
+                <input type="text" id="cameraUrl" placeholder="RTSP / HTTP URL">
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn-secondary" onclick="closeAddCamera()">Cancel</button>
+                <button class="btn-primary" onclick="addCamera()">Add Camera</button>
+            </div>
         </div>
     </div>
     <script src="/scripts/Dashboard.js"></script>

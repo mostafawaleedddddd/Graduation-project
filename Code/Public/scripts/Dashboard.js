@@ -462,3 +462,21 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('activeProjectId', projectId);
   });
 });
+
+
+const modal = document.getElementById('cameraModal');
+function openAddCamera() {
+    modal.classList.add('show');
+}
+function closeAddCamera() {
+    modal.classList.remove('show');
+    
+    document.getElementById('cameraName').value = '';
+    document.getElementById('cameraUrl').value = '';
+}
+window.onclick = function(event) {
+    if (event.target === modal) {
+        closeAddCamera();
+    }
+}
+
