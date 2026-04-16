@@ -51,7 +51,25 @@ async function fetchAttendanceResults() {
     console.error("Error:", error);
   }
 }
+async function activateParkingMode() {
+  // 1. Initialize parking (this opens OpenCV window)
+  await fetch("http://127.0.0.1:5000/init_parking", {
+    method: "POST"
+  });
 
+  alert("Draw parking areas in the opened window, then press ESC");
+
+  // 2. Activate pipeline AFTER setup
+  await fetch("http://127.0.0.1:5000/set_pipeline", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      pipeline: ["Parking Management"]
+    })
+  });
+}
 /* ================= CANVAS SYSTEM ================= */
 const canvas = document.getElementById('canvas');
 const svg = document.getElementById('connectionSvg');
@@ -306,15 +324,20 @@ function saveProject() {
 async function uploadProject() {
   try {
     const pipeline = Array.from(blocks.values()).map(b => b.type);
+
     const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pipeline })
     });
+
     if (!response.ok) throw new Error("Server error");
+
     const data = await response.json();
+
     updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
-    console.log("Backend pipeline:", data.pipeline);
+    console.log("Backend pipeline:", data);
+
   } catch (err) {
     console.error(err);
     updateLiveFeed("Backend not running");

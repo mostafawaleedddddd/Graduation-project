@@ -1,39 +1,32 @@
 import cv2
 from ultralytics import solutions
+import threading
 
 
 class ParkingManagementBlock:
     def __init__(self):
         self.model = None
         self.initialized = False
+        self.setting_up = False  # 🔥 important flag
 
-        # paths (you can change later)
         self.model_path = "best.pt"
         self.json_path = "parking_regions.json"
 
     # ==============================
-    # STEP 1: RUN REGION SELECTION
+    # RUN SETUP (NON-BLOCKING)
     # ==============================
-    def setup_parking_regions(self):
-        """
-        This runs the UI to draw parking regions
-        and generates the JSON file.
-        """
-        print("🅿️ Launching Parking Region Selector...")
+    def run_setup(self):
+        if self.setting_up:
+            return
 
-        solutions.ParkingPtsSelection()
+        self.setting_up = True
 
-        print("✅ Parking regions saved!")
+        def setup_task():
+            print("🅿️ Opening Parking Region Selector...")
 
-    # ==============================
-    # STEP 2: INITIALIZE MODEL
-    # ==============================
-    def initialize(self):
-        """
-        Initialize model AFTER selecting regions.
-        """
-        if not self.initialized:
-            self.setup_parking_regions()
+            solutions.ParkingPtsSelection()
+
+            print("✅ Regions saved. Initializing model...")
 
             self.model = solutions.ParkingManagement(
                 model=self.model_path,
@@ -41,19 +34,21 @@ class ParkingManagementBlock:
             )
 
             self.initialized = True
-            print("🚀 Parking model initialized")
+            self.setting_up = False
+
+            print("🚀 Parking model ready")
+
+        threading.Thread(target=setup_task, daemon=True).start()
 
     # ==============================
-    # STEP 3: PROCESS FRAME
+    # PROCESS FRAME
     # ==============================
     def process(self, frame):
-        """
-        Run parking detection on frame.
-        """
+
+        # 🔥 If not initialized → trigger setup ONCE
         if not self.initialized:
-            self.initialize()
+            self.run_setup()
+            return frame  # don't block stream
 
         results = self.model(frame)
-
-        # return annotated frame
         return results.plot_im

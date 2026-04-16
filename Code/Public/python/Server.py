@@ -203,8 +203,26 @@ class LiveStreamServer:
 
         @self.app.route("/set_pipeline", methods=["POST"])
         def set_pipeline():
-            self.pipeline = request.json.get("pipeline", [])
-            print("PIPELINE:", self.pipeline)
+            new_pipeline = request.json.get("pipeline", [])
+            print("PIPELINE:", new_pipeline)
+
+            # 🔥 Detect Parking Management
+            if "Parking Management" in new_pipeline:
+
+                print("🅿️ Parking selected → pausing system")
+
+                # 🛑 pause processing
+                self.running = False
+                time.sleep(0.5)
+
+                # 🚀 start setup (non-blocking)
+                self.parking_model.run_setup()
+
+                # ▶️ resume system
+                self.running = True
+
+            self.pipeline = new_pipeline
+
             return jsonify({"status": "ok"})
 
         # 🔥 FIXED CAMERA SWITCH (NO FREEZE)
