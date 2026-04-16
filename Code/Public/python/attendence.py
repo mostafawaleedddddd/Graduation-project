@@ -7,7 +7,7 @@ from datetime import datetime
 
 class AttendanceSystem:
 
-    def __init__(self, image_path="attendence_images"):
+    def __init__(self, image_path="attendance_images"):
 
         self.path = image_path
         self.images = []

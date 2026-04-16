@@ -35,7 +35,7 @@ class LiveStreamServer:
         self.pipeline = []
 
         # ================== CAMERA ==================
-        self.camera_source = 0
+        self.camera_source = 1
         self.cap = None
 
         # ================== STATE ==================
