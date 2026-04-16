@@ -34,7 +34,9 @@ class HeatmapProcessor:
         heatmap_color = cv2.applyColorMap(heatmap_uint8, self.config["COLORMAP"])
 
         alpha = (heatmap_uint8 / 255.0) ** self.config["ALPHA_POWER"]
-        threshold_mask = (heatmap_uint8 > 8).astype(np.float32)
+
+        # Raised threshold so faint/residual heat becomes fully transparent
+        threshold_mask = (heatmap_uint8 > 30).astype(np.float32)
         alpha = alpha * threshold_mask
 
         alpha_3ch = np.stack([alpha] * 3, axis=-1)
@@ -55,15 +57,26 @@ class HeatmapBlock:
     def __init__(self):
 
         self.config = {
-            "DECAY": 0.7,
-            "BLUR_R": 71,
-            "BLUR_S": 25,
-            "HEAT_RADIUS": 55,
-            "ALPHA_POWER": 0.3,
-            "ALPHA_BLEND": 0.9,
+            # Slower decay (0.92 vs 0.7) — heat fades naturally over ~12 frames
+            # Increase toward 0.99 for longer session-wide memory
+            "DECAY": 0.92,
+
+            "BLUR_R": 35,           # Reduced spread for smaller heatmap
+            "BLUR_S": 15,
+
+            # Smaller footprint radius
+            "HEAT_RADIUS": 18,
+
+            # Higher value = faint areas become transparent, only hot spots glow
+            "ALPHA_POWER": 0.6,
+
+            "ALPHA_BLEND": 0.85,
             "COLORMAP": cv2.COLORMAP_JET,
-            "NORM_PERCENTILE": 90,
-            "MODE": "retail"  # or "cars"
+
+            # Higher percentile = only truly busy areas stay bright
+            "NORM_PERCENTILE": 97,
+
+            "MODE": "retail"        # or "cars"
         }
 
         self.classes = {
@@ -110,19 +123,22 @@ class HeatmapBlock:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 cx = (x1 + x2) // 2
 
-                for step in np.linspace(y1, y2, num=5):
-                    current_footprints.append((cx, int(step), conf * 0.6))
+                # FIX: Only mark the foot/bottom of the bounding box instead of
+                # sampling the full body height. This ensures heat accumulates
+                # on the floor where people actually stand/walk, not their torso.
+                foot_y = y2
+                current_footprints.append((cx, foot_y, conf))
 
                 detection_count += 1
                 boxes_to_draw.append((x1, y1, x2, y2, conf, is_retail))
 
-        # update heatmap
+        # Update heatmap
         self.processor.update(current_footprints)
 
-        # apply overlay
+        # Apply overlay
         overlay = self.processor.apply_overlay(frame)
 
-        # draw boxes ON TOP
+        # Draw boxes on top
         for (x1, y1, x2, y2, conf, is_ret) in boxes_to_draw:
             cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), 2)
             label = f"{'Person' if is_ret else 'Vehicle'} {conf:.2f}"
