@@ -39,6 +39,7 @@ function startCamera() {
   img.src = "http://127.0.0.1:5000/video?" + new Date().getTime();
 }
 window.onload = startCamera;
+window.onload = fetchAttendanceResults;
 
 async function fetchAttendanceResults() {
   try {

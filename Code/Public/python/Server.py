@@ -12,6 +12,7 @@ from two_models import DualModelObjectCounter
 from shelf_gap_detect_images import ShelfGapDetector
 from attendence import AttendanceSystem
 from car_parking import ParkingManagementBlock
+from heatmap_ipcam import HeatmapBlock
 
 
 class LiveStreamServer:
@@ -30,6 +31,7 @@ class LiveStreamServer:
         self.gap_detector = ShelfGapDetector()
         self.attendance = AttendanceSystem()
         self.parking_model = ParkingManagementBlock()
+        self.heatmap = HeatmapBlock()
 
         # ================== PIPELINE ==================
         self.pipeline = []
@@ -57,6 +59,10 @@ class LiveStreamServer:
 
     # ================== START CAMERA THREAD ==================
     def start_camera_thread(self):
+        if self.camera_thread and self.camera_thread.is_alive():
+            print("⚠️ Camera thread already running")
+            return
+
         self.camera_thread = threading.Thread(
             target=self.camera_loop,
             daemon=True
@@ -70,7 +76,6 @@ class LiveStreamServer:
 
         while True:
 
-            # 🔴 PAUSE when switching camera
             if not self.running:
                 time.sleep(0.1)
                 continue
@@ -102,7 +107,7 @@ class LiveStreamServer:
                     time.sleep(1)
                     continue
 
-            # 🔥 READ FRAME (DROP BUFFER)
+            # 🔥 READ FRAME
             ret = False
             frame = None
 
@@ -137,6 +142,7 @@ class LiveStreamServer:
 
             with self.lock:
                 if self.raw_frame is None:
+                    time.sleep(0.01)
                     continue
                 frame = self.raw_frame.copy()
 
@@ -167,6 +173,9 @@ class LiveStreamServer:
                 elif step == "Parking Management":
                     frame = self.parking_model.process(frame)
 
+                elif step == "Heatmap":
+                    frame = self.heatmap.process(frame)
+
             with self.lock:
                 self.processed_frame = frame
 
@@ -177,12 +186,15 @@ class LiveStreamServer:
 
         while True:
             with self.lock:
-                frame = self.processed_frame
+                frame = self.processed_frame.copy() if self.processed_frame is not None else None
 
             if frame is None:
+                time.sleep(0.01)
                 continue
 
-            _, buffer = cv2.imencode(".jpg", frame)
+            ret, buffer = cv2.imencode(".jpg", frame)
+            if not ret:
+                continue
 
             yield (
                 b"--frame\r\n"
@@ -206,26 +218,23 @@ class LiveStreamServer:
             new_pipeline = request.json.get("pipeline", [])
             print("PIPELINE:", new_pipeline)
 
-            # 🔥 Detect Parking Management
+            # 🔥 PARKING SETUP (NON-BLOCKING)
             if "Parking Management" in new_pipeline:
+                print("🅿️ Parking setup starting...")
 
-                print("🅿️ Parking selected → pausing system")
+                def setup():
+                    self.running = False
+                    self.parking_model.run_setup()
+                    self.running = True
+                    print("✅ Parking setup done")
 
-                # 🛑 pause processing
-                self.running = False
-                time.sleep(0.5)
-
-                # 🚀 start setup (non-blocking)
-                self.parking_model.run_setup()
-
-                # ▶️ resume system
-                self.running = True
+                threading.Thread(target=setup, daemon=True).start()
 
             self.pipeline = new_pipeline
 
-            return jsonify({"status": "ok"})
+            return jsonify({"status": "ok", "pipeline": self.pipeline})
 
-        # 🔥 FIXED CAMERA SWITCH (NO FREEZE)
+        # ================== CAMERA SWITCH ==================
         @self.app.route("/set_camera", methods=["POST"])
         def set_camera():
             data = request.json
@@ -233,11 +242,11 @@ class LiveStreamServer:
 
             print("Switching camera to:", new_url)
 
-            # 🛑 STOP threads safely
+            # 🛑 Pause
             self.running = False
-            time.sleep(0.5)
+            time.sleep(0.3)
 
-            # 🔥 RELEASE camera
+            # 🔥 Release camera
             if self.cap:
                 try:
                     self.cap.release()
@@ -245,26 +254,24 @@ class LiveStreamServer:
                     pass
                 self.cap = None
 
-            # 🔄 CLEAR FRAMES
+            # 🔄 Update source
+            self.camera_source = new_url
+
+            # 🔄 Clear frames
             with self.lock:
                 self.raw_frame = None
                 self.processed_frame = None
 
-            # 🔁 SET NEW CAMERA
-            self.camera_source = new_url
-
-            # ▶️ RESTART
+            # ▶️ Resume
             self.running = True
-            self.start_camera_thread()
 
             return jsonify({"status": "camera switched"})
 
-        # ✅ ATTENDANCE RESULTS
+        # ================== ATTENDANCE ==================
         @self.app.route("/attendance_results")
         def attendance_results():
             return jsonify(self.attendance.get_results())
 
-        # ✅ RESET ATTENDANCE
         @self.app.route("/reset_attendance")
         def reset_attendance():
             self.attendance.reset()
