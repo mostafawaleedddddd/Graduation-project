@@ -26,7 +26,7 @@ mongoose.connect(process.env.MONGO_URI);
 
 // Routes (MATCH CASE EXACTLY)
 app.use("/", require("./routes/MainRoutes"));
-app.use("/auth", require("./routes/AuthRoutes"));
+// app.use("/auth", require("./routes/AuthRoutes"));
 app.use("/user", require("./routes/UserRoutes"));
 
 // Server

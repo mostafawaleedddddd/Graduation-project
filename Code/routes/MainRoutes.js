@@ -6,6 +6,9 @@ const user = require("../controllers/userController");
 
 
 router.get("/", controller.home);
+router.get("/login", controller.login);
+router.get("/signup", controller.signup);
+router.get("/auth", controller.login);
 router.get('/successful-login', (req, res) => {
   res.render('Successful_login');
 });
