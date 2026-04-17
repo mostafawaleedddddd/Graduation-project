@@ -1,5 +1,7 @@
-flask
-flask-cors
-opencv-python
-ultralytics
-numpy
+required for running Server.py are:
+pip install insightface
+pip install huggingface_hub
+pip install flask_cors
+pip install opencv-python
+pip install ultralytics
+pip install numpy
