@@ -1,4 +1,3 @@
-import cv2
 from ultralytics import solutions
 import threading
 
@@ -10,7 +9,7 @@ class ParkingManagementBlock:
         self.setting_up = False  # 🔥 important flag
 
         self.model_path = "best.pt"
-        self.json_path = "parking_regions.json"
+        self.json_path = "bounding_boxes.json"
 
     # ==============================
     # RUN SETUP (NON-BLOCKING)

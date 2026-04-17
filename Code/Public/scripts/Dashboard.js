@@ -14,39 +14,23 @@ async function addCamera() {
     return;
   }
 
-  // 🔥 BASIC FORMAT VALIDATION
-  const isValidFormat =
-    url.startsWith("rtsp://") ||
-    url.startsWith("http://") ||
-    url.startsWith("https://");
+  // ✅ STRONG FORMAT VALIDATION (IP / RTSP / HTTP)
+  const isValidFormat = /^(rtsp:\/\/|http:\/\/|https:\/\/)((\d{1,3}\.){3}\d{1,3}|localhost|([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(:\d+)?(\/.*)?$/.test(url);
 
   if (!isValidFormat) {
-    alert("Invalid URL format. Must start with rtsp:// or http://");
+    alert("Invalid camera URL format");
     return;
   }
 
   try {
-    // 🔥 SEND TO BACKEND FOR REAL CHECK
-    const res = await fetch("/user/validateCamera", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url })
-    });
-
-    const data = await res.json();
-
-    if (!data.valid) {
-      alert("❌ Camera not reachable");
-      return;
-    }
-
-    // ✅ SAVE CAMERA
+    // ✅ SAVE CAMERA (no backend validation now)
     await fetch('/user/addCamera', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, url })
     });
 
+    // ✅ UPDATE DROPDOWN
     const select = document.getElementById("cameraSelect");
     const option = document.createElement("option");
     option.value = url;
@@ -58,7 +42,7 @@ async function addCamera() {
 
   } catch (err) {
     console.error(err);
-    alert("Server error while validating camera");
+    alert("Server error while adding camera");
   }
 }
 
