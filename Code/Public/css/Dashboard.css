@@ -660,3 +660,55 @@ svg {
     background: #333;
     color: #c9d1d9;
 }
+
+
+.modal-scroll-area {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    padding-right: 10px; 
+    color: #c9d1d9;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.modal-scroll-area::-webkit-scrollbar {
+    width: 6px;
+}
+.modal-scroll-area::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2); 
+    border-radius: 4px;
+}
+.modal-scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2); 
+    border-radius: 4px;
+}
+.modal-scroll-area::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4); 
+}
+
+.attendance-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.attendance-item {
+    display: flex;
+    justify-content: space-between;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 10px 15px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.attendance-name {
+    font-weight: bold;
+    color: white;
+}
+
+.attendance-time {
+    color: #888;
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+}

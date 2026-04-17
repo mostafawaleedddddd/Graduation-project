@@ -64,6 +64,26 @@
         </div>
 
 
+        <div id="infoModal" class="modal-overlay">
+            <div class="modal-content window-panel">
+
+                <div class="window-header">
+                    <button class="close-btn window-close" onclick="closeInfoModal()">&times;</button>
+                </div>
+
+                <div class="window-body">
+                    <h3 id="infoModalTitle">Notification</h3>
+
+                    <div id="infoModalContent" class="modal-scroll-area">
+                    </div>
+
+                    <div class="action-buttons window-actions">
+                        <button class="btn-primary" onclick="closeInfoModal()">OK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Canvas -->
         <div class="canvas-wrapper">
             <div class="canvas" id="canvas">
