@@ -1,3 +1,6 @@
+from importlib.resources import files
+import os
+
 import cv2
 from flask import Flask, Response, request, jsonify
 from flask_cors import CORS
@@ -276,6 +279,38 @@ class LiveStreamServer:
         def reset_attendance():
             self.attendance.reset()
             return jsonify({"status": "reset done"})
+        
+        @self.app.route("/upload_attendance_images", methods=["POST"])
+        def upload_images():
+
+            if "images" not in request.files:
+                return jsonify({"message": "No files received"}), 400
+
+            files = request.files.getlist("images")
+
+            if not files:
+                return jsonify({"message": "Empty file list"}), 400
+
+            saved_files = []
+
+            for file in files:
+                if file.filename == "":
+                    continue
+
+                # ✅ use original filename directly (NO UUID)
+                name = os.path.splitext(file.filename)[0]
+                filepath = os.path.join("attendance_images", file.filename)
+
+                file.save(filepath)
+                saved_files.append(filepath)
+
+                # ✅ update system immediately
+                self.attendance.add_image(filepath, name)
+
+            return jsonify({
+                "status": "success",
+                "saved": saved_files
+            }), 200
 
     # ================== RUN ==================
     def run(self):

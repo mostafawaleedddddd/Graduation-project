@@ -5,22 +5,61 @@ function openAddCamera() {
 function closeAddCamera() {
   document.getElementById("cameraModal").style.display = "none";
 }
-function addCamera() {
+async function addCamera() {
   const name = document.getElementById("cameraName").value;
   const url = document.getElementById("cameraUrl").value;
-  if (!name || !url) { alert("Enter camera name and URL"); return; }
-  cameras.push({ name, url });
-  fetch('/user/addCamera', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, url })
-  });
-  const select = document.getElementById("cameraSelect");
-  const option = document.createElement("option");
-  option.value = url;
-  option.textContent = name;
-  select.appendChild(option);
-  closeAddCamera();
+
+  if (!name || !url) {
+    alert("Enter camera name and URL");
+    return;
+  }
+
+  // 🔥 BASIC FORMAT VALIDATION
+  const isValidFormat =
+    url.startsWith("rtsp://") ||
+    url.startsWith("http://") ||
+    url.startsWith("https://");
+
+  if (!isValidFormat) {
+    alert("Invalid URL format. Must start with rtsp:// or http://");
+    return;
+  }
+
+  try {
+    // 🔥 SEND TO BACKEND FOR REAL CHECK
+    const res = await fetch("/user/validateCamera", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+
+    const data = await res.json();
+
+    if (!data.valid) {
+      alert("❌ Camera not reachable");
+      return;
+    }
+
+    // ✅ SAVE CAMERA
+    await fetch('/user/addCamera', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, url })
+    });
+
+    const select = document.getElementById("cameraSelect");
+    const option = document.createElement("option");
+    option.value = url;
+    option.textContent = name;
+    select.appendChild(option);
+
+    closeAddCamera();
+    alert("✅ Camera added successfully");
+
+  } catch (err) {
+    console.error(err);
+    alert("Server error while validating camera");
+  }
 }
 
 document.getElementById("cameraSelect").addEventListener("change", async function () {
@@ -39,19 +78,7 @@ function startCamera() {
   img.src = "http://127.0.0.1:5000/video?" + new Date().getTime();
 }
 window.onload = startCamera;
-window.onload = fetchAttendanceResults;
 
-async function fetchAttendanceResults() {
-  try {
-    const response = await fetch("http://127.0.0.1:5000/attendance_results");
-    if (!response.ok) throw new Error("Failed to fetch attendance data");
-    const data = await response.json();
-    console.log("Attendance Data:", data);
-    displayAttendance(data);
-  } catch (error) {
-    console.error("Error:", error);
-  }
-}
 async function activateParkingMode() {
   // 1. Initialize parking (this opens OpenCV window)
   await fetch("http://127.0.0.1:5000/init_parking", {
@@ -109,10 +136,23 @@ function createBlock(type, x, y) {
   const block = document.createElement('div');
   block.className = 'block';
   block.id = id;
+
+  // 🔥 DEFAULT controls
+  let extraButtons = "";
+
+  // ✅ ADD SPECIAL BUTTONS FOR ATTENDANCE
+  if (type === "Attendance") {
+    extraButtons = `
+      <button class="list-btn">List</button>
+      <button class="images-btn">Images</button>
+    `;
+  }
+
   block.innerHTML = `
     <div class="block-title">${type}</div>
     <div class="block-controls">
       <button class="link-btn">Link</button>
+      ${extraButtons}
       <button class="delete-btn">✕</button>
     </div>
     <div class="port top" data-port="top"></div>
@@ -120,20 +160,28 @@ function createBlock(type, x, y) {
     <div class="port left" data-port="left"></div>
     <div class="port right" data-port="right"></div>
   `;
+
   const bx = x - 70;
   const by = y - 40;
   block.style.left = `${bx}px`;
   block.style.top = `${by}px`;
   canvas.appendChild(block);
 
-  // Measure actual block size after appending
   const w = block.offsetWidth || BLOCK_W;
   const h = block.offsetHeight || BLOCK_H;
 
   blocks.set(id, { id, type, element: block, x: bx, y: by, w, h });
 
+  // 🔥 EXISTING BUTTONS
   block.querySelector('.link-btn').onclick = () => toggleLinking(id);
   block.querySelector('.delete-btn').onclick = () => deleteBlock(id);
+
+  // ✅ NEW BUTTON EVENTS (ONLY FOR ATTENDANCE)
+  if (type === "Attendance") {
+    block.querySelector('.list-btn').onclick = () => showAttendanceList();
+    block.querySelector('.images-btn').onclick = () => uploadAttendanceImages();
+  }
+
   makeBlockDraggable(id);
   updateLiveFeed(`Added ${type} block`);
   return id;
@@ -326,6 +374,51 @@ async function uploadProject() {
   try {
     const pipeline = Array.from(blocks.values()).map(b => b.type);
 
+    if (pipeline.length === 0) {
+      alert("Pipeline is empty");
+      return;
+    }
+
+    // ================= VALIDATION RULES =================
+    const allowedExact = [
+      ["Object Counting", "Gap Detection"],
+      ["Tracking", "Attendance"]
+    ];
+
+    const isSingle = pipeline.length === 1;
+
+    const isAllowedCombo = allowedExact.some(allowed =>
+      allowed.length === pipeline.length &&
+      allowed.every(v => pipeline.includes(v))
+    );
+
+    const isAllowedSingle =
+      isSingle &&
+      (
+        pipeline[0] === "Object Counting" ||
+        pipeline[0] === "Gap Detection" ||
+        pipeline[0] === "Tracking" ||
+        pipeline[0] === "Attendance" ||
+        pipeline[0] === "Parking Management" ||
+        pipeline[0] === "Heatmap" ||
+        pipeline[0] === "Object Detection" ||
+        pipeline[0] === "Color Detection"
+      );
+
+    const isValid =
+      isAllowedSingle || isAllowedCombo;
+
+    if (!isValid) {
+      alert(
+        "Invalid pipeline!\n\nAllowed:\n" +
+        "- Single model only\n" +
+        "- Object Counting + Gap Detection\n" +
+        "- Tracking + Attendance"
+      );
+      return;
+    }
+
+    // ================= SEND TO SERVER =================
     const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -344,7 +437,6 @@ async function uploadProject() {
     updateLiveFeed("Backend not running");
   }
 }
-
 /* ================= LOGOUT ================= */
 const logoutBtn = document.getElementById("logoutBtn");
 if (logoutBtn) {
@@ -420,6 +512,69 @@ function autoConnectBlocksInOrder(orderedBlockIds) {
   }
   drawConnections();
 }
+//-------------------Attendence Buttons-------------------
+async function showAttendanceList() {
+  try {
+    const res = await fetch("http://127.0.0.1:5000/attendance_results");
+    const data = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      alert("No attendance records yet");
+      return;
+    }
+
+    let msg = "Attendance List:\n\n";
+
+    data.forEach(person => {
+      msg += `${person.name} - ${person.time}\n`;
+    });
+
+    alert(msg);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to fetch attendance list");
+  }
+}
+function uploadAttendanceImages() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  input.accept = "image/*";
+
+  input.onchange = async () => {
+    const files = input.files;
+    const formData = new FormData();
+
+    for (let file of files) {
+      formData.append("images", file);
+    }
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/upload_attendance_images", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await res.json();
+
+      console.log("Upload response:", data);
+
+      if (res.status === 200) {
+        alert("Images uploaded successfully");
+      } else {
+        alert("Upload failed: " + data.message);
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert("Server not reachable");
+    }
+  };
+
+  input.click();
+}
+
 
 document.addEventListener('DOMContentLoaded', () => {
   loadProjects();

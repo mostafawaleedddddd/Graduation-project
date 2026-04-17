@@ -304,7 +304,7 @@ svg {
 .link-btn.active {
     background: linear-gradient(135deg, #9334ea 0%, #7c2d9e 100%);
     box-shadow: 0 6px 16px rgba(147, 51, 234, 0.4);
-}
+} 
 
 .delete-btn {
     width: 24px;
@@ -325,7 +325,57 @@ svg {
     background: rgba(255, 100, 100, 0.3);
     border-color: rgba(255, 100, 100, 0.6);
 }
+.list-btn {
+    flex: 1;
+    background: linear-gradient(135deg, #6496ff 0%, #4a6fb5 100%);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
 
+.list-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px rgba(100, 150, 255, 0.3);
+}
+
+.list-btn.active {
+    background: linear-gradient(135deg, #9334ea 0%, #7c2d9e 100%);
+    box-shadow: 0 6px 16px rgba(147, 51, 234, 0.4);
+}
+
+
+
+.images-btn {
+    flex: 1;
+    background: linear-gradient(135deg, #6496ff 0%, #4a6fb5 100%);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.images-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px rgba(100, 150, 255, 0.3);
+}
+
+.images-btn.active {
+    background: linear-gradient(135deg, #9334ea 0%, #7c2d9e 100%);
+    box-shadow: 0 6px 16px rgba(147, 51, 234, 0.4);
+}
 /* Live Feed Panel */
 .live-feed-panel {
     position: fixed;

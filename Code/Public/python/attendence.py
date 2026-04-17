@@ -1,8 +1,8 @@
 import cv2
-import face_recognition
 import os
 import numpy as np
 from datetime import datetime
+from insightface.app import FaceAnalysis
 
 
 class AttendanceSystem:
@@ -10,46 +10,44 @@ class AttendanceSystem:
     def __init__(self, image_path="attendance_images"):
 
         self.path = image_path
-        self.images = []
+
+        self.known_embeddings = []
         self.classNames = []
 
-        self.encodeListKnown = []
         self.marked_names = set()
         self.attendance_log = []
 
+        # 🔥 Load InsightFace model
+        self.app = FaceAnalysis(name="buffalo_l")
+        self.app.prepare(ctx_id=0, det_size=(640, 640))
+
         self._load_images()
-        self._encode_faces()
 
     # ==============================
-    # LOAD DATABASE IMAGES
+    # LOAD & ENCODE DATABASE
     # ==============================
     def _load_images(self):
 
-        myList = os.listdir(self.path)
+        for file in os.listdir(self.path):
 
-        for cl in myList:
-            curImg = cv2.imread(f"{self.path}/{cl}")
+            img_path = os.path.join(self.path, file)
+            img = cv2.imread(img_path)
 
-            if curImg is not None:
-                self.images.append(curImg)
-                self.classNames.append(os.path.splitext(cl)[0])
+            if img is None:
+                continue
 
-        print("Loaded Faces:", self.classNames)
+            faces = self.app.get(img)
 
-    # ==============================
-    # ENCODE FACES
-    # ==============================
-    def _encode_faces(self):
+            if len(faces) == 0:
+                continue
 
-        for img in self.images:
+            embedding = faces[0].embedding
+            self.known_embeddings.append(embedding)
 
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            encodes = face_recognition.face_encodings(img)
+            name = os.path.splitext(file)[0]
+            self.classNames.append(name)
 
-            if len(encodes) > 0:
-                self.encodeListKnown.append(encodes[0])
-
-        print("Face Encoding Complete")
+        print("✅ Loaded Faces:", self.classNames)
 
     # ==============================
     # MARK ATTENDANCE
@@ -73,88 +71,70 @@ class AttendanceSystem:
             print("Attendance Marked:", record)
 
     # ==============================
-    # MAIN PROCESS FUNCTION
+    # MAIN PROCESS
     # ==============================
     def process(self, frame):
 
-        imgS = cv2.resize(frame, (0, 0), None, 0.25, 0.25)
-        imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
+        faces = self.app.get(frame)
 
-        facesCurFrame = face_recognition.face_locations(imgS)
-        encodesCurFrame = face_recognition.face_encodings(imgS, facesCurFrame)
+        for face in faces:
 
-        for encodeFace, faceLoc in zip(encodesCurFrame, facesCurFrame):
+            x1, y1, x2, y2 = map(int, face.bbox)
+            embedding = face.embedding
 
-            faceDis = face_recognition.face_distance(
-                self.encodeListKnown,
-                encodeFace
-            )
-
-            if len(faceDis) == 0:
+            if len(self.known_embeddings) == 0:
                 continue
 
-            matchIndex = np.argmin(faceDis)
+            # 🔥 Cosine similarity
+            sims = np.dot(self.known_embeddings, embedding) / (
+                np.linalg.norm(self.known_embeddings, axis=1) * np.linalg.norm(embedding)
+            )
 
-            y1, x2, y2, x1 = faceLoc
-            y1, x2, y2, x1 = y1*4, x2*4, y2*4, x1*4
+            best_match = np.argmax(sims)
 
-            if faceDis[matchIndex] < 0.5:
+            if sims[best_match] > 0.6:  # threshold (0.4–0.6)
 
-                name = self.classNames[matchIndex].upper()
+                name = self.classNames[best_match].upper()
 
-                cv2.rectangle(
-                    frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 255, 0),
-                    2
-                )
-
-                cv2.putText(
-                    frame,
-                    name,
-                    (x1, y2 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 255, 0),
-                    2
-                )
-
+                color = (0, 255, 0)
                 self._mark_attendance(name)
 
             else:
+                name = "UNKNOWN"
+                color = (0, 0, 255)
 
-                cv2.rectangle(
-                    frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 0, 255),
-                    2
-                )
-
-                cv2.putText(
-                    frame,
-                    "Unknown",
-                    (x1, y2 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 0, 255),
-                    2
-                )
+            # DRAW
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame, name, (x1, y2 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
         return frame
 
     # ==============================
-    # GET ATTENDANCE RESULTS
+    # GET RESULTS
     # ==============================
     def get_results(self):
-
         return self.attendance_log
 
-    # ==============================
-    # RESET ATTENDANCE
-    # ==============================
-    def reset(self):
+    def add_image(self, filepath, name):
 
+        img = cv2.imread(filepath)
+        if img is None:
+            print("❌ Failed to load image")
+            return
+
+        faces = self.app.get(img)
+
+        if len(faces) == 0:
+            print("❌ No face found in image")
+            return
+
+        embedding = faces[0].embedding
+        self.known_embeddings.append(embedding)
+        self.classNames.append(name)
+        print(f"✅ Added new face: {name}")
+
+        
+    def reset(self):
         self.marked_names.clear()
         self.attendance_log = []
