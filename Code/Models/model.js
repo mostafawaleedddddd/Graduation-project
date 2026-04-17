@@ -16,7 +16,10 @@ const projectSchema = new Schema(
         "Object Detection",
         "Tracking",
         "Object Counting",
-        "Gap Detection"
+        "Gap Detection",
+        "Heatmap",
+        "Parking Management",
+        "Attendance"
       ],
       default: []
     },
