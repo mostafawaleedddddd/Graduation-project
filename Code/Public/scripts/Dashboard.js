@@ -1,4 +1,7 @@
 let cameras = [];
+const cameraPipelines = {};
+let currentCameraId = null;
+
 function openAddCamera() {
   document.getElementById("cameraModal").style.display = "block";
 }
@@ -34,6 +37,7 @@ async function addCamera() {
     const select = document.getElementById("cameraSelect");
     const option = document.createElement("option");
     option.value = url;
+    option.dataset.cameraId = name;
     option.textContent = name;
     select.appendChild(option);
 
@@ -46,20 +50,50 @@ async function addCamera() {
   }
 }
 
-document.getElementById("cameraSelect").addEventListener("change", async function () {
-  const url = this.value;
-  if (!url) return;
+function getCurrentPipelineFromBlocks() {
+  return Array.from(blocks.values()).map(b => b.type);
+}
+
+function clearCanvasBlocks() {
+  Array.from(blocks.keys()).forEach(id => deleteBlock(id));
+  connections.length = 0;
+  drawConnections();
+}
+
+async function applyCameraSelection(cameraId, url) {
+  currentCameraId = cameraId;
+
+  const body = { camera_id: cameraId };
+  if (url) body.url = url;
+
   await fetch("http://127.0.0.1:5000/set_camera", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url })
+    body: JSON.stringify(body)
   });
+
+  const pipeline = cameraPipelines[cameraId] || [];
+  clearCanvasBlocks();
+  renderProjectBlocks(pipeline);
   startCamera();
+}
+
+document.getElementById("cameraSelect").addEventListener("change", async function () {
+  const url = this.value;
+  if (!url) return;
+  const cameraId = this.selectedOptions[0].dataset.cameraId || url;
+
+  if (currentCameraId) {
+    cameraPipelines[currentCameraId] = getCurrentPipelineFromBlocks();
+  }
+
+  await applyCameraSelection(cameraId, url);
 });
 
 function startCamera() {
   const img = document.getElementById("live-feed");
-  img.src = "http://127.0.0.1:5000/video?" + new Date().getTime();
+  const suffix = currentCameraId ? `camera_id=${encodeURIComponent(currentCameraId)}&` : "";
+  img.src = `http://127.0.0.1:5000/video?${suffix}t=${new Date().getTime()}`;
 }
 window.onload = startCamera;
 
@@ -406,7 +440,7 @@ async function uploadProject() {
     const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pipeline })
+      body: JSON.stringify({ pipeline, camera_id: currentCameraId || "default" })
     });
 
     if (!response.ok) throw new Error("Server error");

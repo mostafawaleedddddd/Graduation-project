@@ -38,9 +38,12 @@ class LiveStreamServer:
 
         # ================== PIPELINE ==================
         self.pipeline = []
+        self.camera_pipelines = {"default": []}
 
         # ================== CAMERA ==================
         self.camera_source = 1
+        self.camera_sources = {"default": self.camera_source}
+        self.current_camera_id = "default"
         self.cap = None
 
         # ================== STATE ==================
@@ -83,42 +86,35 @@ class LiveStreamServer:
                 time.sleep(0.1)
                 continue
 
-            # 🔁 CONNECT CAMERA
             if self.cap is None:
                 print(f"🎥 Connecting to: {self.camera_source}")
 
                 try:
                     if str(self.camera_source).startswith("rtsp://"):
-                        self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
+                        cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
                     else:
-                        self.cap = cv2.VideoCapture(self.camera_source)
+                        cap = cv2.VideoCapture(self.camera_source)
 
-                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-                    if not self.cap.isOpened():
+                    if not cap.isOpened():
                         print("❌ Failed to open camera")
-                        self.cap.release()
-                        self.cap = None
+                        cap.release()
                         time.sleep(1)
                         continue
 
+                    self.cap = cap
                     print("✅ Camera connected")
 
                 except Exception as e:
                     print("Camera error:", e)
-                    self.cap = None
                     time.sleep(1)
                     continue
 
-            # 🔥 READ FRAME
-            ret = False
-            frame = None
+            ret, frame = self.cap.read()
 
-            for _ in range(3):
-                ret, frame = self.cap.read()
-
-            if not ret:
-                print("⚠️ Frame failed → reconnecting...")
+            if not ret or frame is None:
+                print("⚠️ Frame failed → resetting camera")
 
                 try:
                     self.cap.release()
@@ -126,7 +122,7 @@ class LiveStreamServer:
                     pass
 
                 self.cap = None
-                time.sleep(1)
+                time.sleep(0.5)
                 continue
 
             frame = cv2.resize(frame, (640, 480))
@@ -211,6 +207,10 @@ class LiveStreamServer:
 
         @self.app.route("/video")
         def video():
+            camera_id = request.args.get("camera_id", "default")
+            if camera_id != self.current_camera_id:
+                return Response(f"Camera {camera_id} is not active. Switch camera first.", status=404)
+
             return Response(
                 self.generate_frames(),
                 mimetype="multipart/x-mixed-replace; boundary=frame"
@@ -218,57 +218,65 @@ class LiveStreamServer:
 
         @self.app.route("/set_pipeline", methods=["POST"])
         def set_pipeline():
+            camera_id = request.json.get("camera_id", "default")
             new_pipeline = request.json.get("pipeline", [])
-            print("PIPELINE:", new_pipeline)
+            print("PIPELINE:", new_pipeline, "CAMERA:", camera_id)
 
-            # 🔥 PARKING SETUP (NON-BLOCKING)
-            if "Parking Management" in new_pipeline:
-                print("🅿️ Parking setup starting...")
+            self.camera_pipelines[camera_id] = new_pipeline
+            if camera_id == self.current_camera_id:
+                self.pipeline = new_pipeline
 
-                def setup():
-                    self.running = False
-                    self.parking_model.run_setup()
-                    self.running = True
-                    print("✅ Parking setup done")
+                # 🔥 PARKING SETUP (NON-BLOCKING)
+                if "Parking Management" in new_pipeline:
+                    print("🅿️ Parking setup starting...")
 
-                threading.Thread(target=setup, daemon=True).start()
+                    def setup():
+                        self.running = False
+                        self.parking_model.run_setup()
+                        self.running = True
+                        print("✅ Parking setup done")
 
-            self.pipeline = new_pipeline
+                    threading.Thread(target=setup, daemon=True).start()
 
-            return jsonify({"status": "ok", "pipeline": self.pipeline})
+            return jsonify({"status": "ok", "camera_id": camera_id, "pipeline": new_pipeline})
 
         # ================== CAMERA SWITCH ==================
         @self.app.route("/set_camera", methods=["POST"])
         def set_camera():
             data = request.json
-            new_url = data.get("url")
+            camera_id = data.get("camera_id", "default")
+            new_url = data.get("url") or self.camera_sources.get(camera_id)
 
-            print("Switching camera to:", new_url)
+            if not new_url:
+                return jsonify({"status": "missing camera url"}), 400
+
+            print("Switching camera to:", camera_id, new_url)
 
             # 🛑 Pause
             self.running = False
-            time.sleep(0.3)
 
-            # 🔥 Release camera
+            time.sleep(0.5)
+
             if self.cap:
                 try:
                     self.cap.release()
                 except:
                     pass
-                self.cap = None
 
-            # 🔄 Update source
-            self.camera_source = new_url
+            self.cap = None
 
-            # 🔄 Clear frames
             with self.lock:
                 self.raw_frame = None
                 self.processed_frame = None
 
-            # ▶️ Resume
+            self.camera_sources[camera_id] = new_url
+            self.current_camera_id = camera_id
+            self.camera_source = new_url
+            self.pipeline = self.camera_pipelines.get(camera_id, [])
+
             self.running = True
 
-            return jsonify({"status": "camera switched"})
+            return jsonify({"status": "camera switched", "camera_id": camera_id, "pipeline": self.pipeline})
 
         # ================== ATTENDANCE ==================
         @self.app.route("/attendance_results")
