@@ -5,6 +5,7 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "mongodb": "^7.0.0",
-    "mongoose": "^9.1.5"
+    "mongoose": "^9.1.5",
+    "mongose": "^0.0.2-security"
   }
 }
