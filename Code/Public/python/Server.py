@@ -16,6 +16,7 @@ from shelf_gap_detect_images import ShelfGapDetector
 from attendence import AttendanceSystem
 from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
+from NMN1 import ShelfOrchestrator
 
 
 class LiveStreamServer:
@@ -35,6 +36,7 @@ class LiveStreamServer:
         self.attendance = AttendanceSystem()
         self.parking_model = ParkingManagementBlock()
         self.heatmap = HeatmapBlock()
+        self.shelf_orchestrator = ShelfOrchestrator()
 
         # ================== PIPELINE ==================
         self.pipeline = []
@@ -132,7 +134,6 @@ class LiveStreamServer:
 
     # ================== PROCESSING LOOP ==================
     def processing_loop(self):
-
         while True:
 
             if not self.running:
@@ -145,8 +146,13 @@ class LiveStreamServer:
                     continue
                 frame = self.raw_frame.copy()
 
+            pipeline = self.pipeline.copy()
+            if "Gap Detection" in pipeline and "Object Counting" in pipeline:
+                pipeline = [s for s in pipeline if s not in ["Gap Detection", "Object Counting"]]
+                pipeline.append("Shelf Orchestrator")
+
             # 🔁 APPLY PIPELINE
-            for step in self.pipeline:
+            for step in pipeline:
 
                 if step == "Object Detection":
                     results = self.model(frame, conf=0.4)
@@ -160,8 +166,11 @@ class LiveStreamServer:
                 elif step == "Color Detection":
                     frame = apply_color_detection(frame)
 
+                elif step == "Shelf Orchestrator":
+                    frame = self.shelf_orchestrator.process(frame)
+
                 elif step == "Object Counting":
-                    frame = self.object_counter.process(frame)
+                    frame, _ = self.object_counter.process(frame)
 
                 elif step == "Gap Detection":
                     frame = self.gap_detector.process(frame)

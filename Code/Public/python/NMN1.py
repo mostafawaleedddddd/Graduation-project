@@ -57,7 +57,7 @@ class GapDetector:
                 x1, y1, x2, y2 = map(int, box)
                 gaps.append((x1, y1, x2, y2))
 
-        return gaps
+        return frame, gaps
 
 def _intersection(a, b):
     ax1, ay1, ax2, ay2 = a
@@ -145,7 +145,7 @@ class ShelfOrchestrator:
         # IMPORTANT FIX (your new format)
         _, product_boxes = self.product_detector.process(frame)
 
-        gap_boxes = self.gap_detector.process(frame)
+        frame, gap_boxes = self.gap_detector.process(frame)
 
         surviving_products = self._suppress(product_boxes, gap_boxes)
 
