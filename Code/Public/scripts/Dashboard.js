@@ -9,31 +9,32 @@ function closeAddCamera() {
   document.getElementById("cameraModal").style.display = "none";
 }
 async function addCamera() {
-  const name = document.getElementById("cameraName").value;
-  const url = document.getElementById("cameraUrl").value;
+  const name = document.getElementById("cameraName").value.trim();
+  const url = document.getElementById("cameraUrl").value.trim();
 
   if (!name || !url) {
-    alert("Enter camera name and URL");
+    openInfoModal("Input Required", "<p style='color: #ffbd2e;'>Please enter both a camera name and URL.</p>");
     return;
   }
 
-  // ✅ STRONG FORMAT VALIDATION (IP / RTSP / HTTP)
   const isValidFormat = /^(rtsp:\/\/|http:\/\/|https:\/\/)((\d{1,3}\.){3}\d{1,3}|localhost|([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(:\d+)?(\/.*)?$/.test(url);
 
   if (!isValidFormat) {
-    alert("Invalid camera URL format");
+    openInfoModal(
+        "Invalid Format", 
+        `<p style='color: #ff6b6b; margin-bottom: 8px;'>Invalid camera URL format.</p>
+         <p style='font-size: 13px; color: #aaa;'>Must start with <b>rtsp://</b>, <b>http://</b>, or <b>https://</b></p>`
+    );
     return;
   }
 
   try {
-    // ✅ SAVE CAMERA (no backend validation now)
     await fetch('/user/addCamera', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, url })
     });
 
-    // ✅ UPDATE DROPDOWN
     const select = document.getElementById("cameraSelect");
     const option = document.createElement("option");
     option.value = url;
@@ -42,11 +43,11 @@ async function addCamera() {
     select.appendChild(option);
 
     closeAddCamera();
-    alert("✅ Camera added successfully");
+    openInfoModal("Success", `<p>Camera "<b>${name}</b>" added successfully.</p>`);
 
   } catch (err) {
     console.error(err);
-    alert("Server error while adding camera");
+    openInfoModal("Server Error", "<p style='color: #ff6b6b;'>Server error while adding the camera.</p>");
   }
 }
 
@@ -370,22 +371,50 @@ function updateLiveFeed(msg) {
 updateLiveFeed('System ready');
 
 /* ================= PROJECT FUNCTIONS ================= */
+const saveModal = document.getElementById('saveProjectModal');
+const projectNameInput = document.getElementById('projectNameInput');
+
+function closeSaveModal() {
+    saveModal.classList.remove('show');
+    projectNameInput.value = ''; 
+}
 function saveProject() {
-  const pipeline = Array.from(blocks.values()).map(b => b.type);
-  if (pipeline.length === 0) { alert("Cannot save empty project"); return; }
-  const name = prompt("Enter project name:");
-  if (!name) return;
-  fetch('/user/projectsCreate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, pipeline })
-  })
+    const pipeline = Array.from(blocks.values()).map(b => b.type);
+    
+    if (pipeline.length === 0) { 
+        openInfoModal("Warning", "<p style='color: #ffbd2e;'>Cannot save an empty project.</p>"); 
+        return; 
+    }
+    saveModal.classList.add('show');
+    projectNameInput.focus(); 
+}
+function confirmSaveProject() {
+    const name = projectNameInput.value.trim();
+    
+    if (!name) {
+        openInfoModal("Input Required", "<p>Please enter a valid project name.</p>");
+        return;
+    }
+    const pipeline = Array.from(blocks.values()).map(b => b.type);
+    closeSaveModal(); 
+    fetch('/user/projectsCreate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, pipeline })
+    })
     .then(res => res.json())
     .then(data => {
-      if (data.success) { updateLiveFeed(`Project "${name}" saved`); window.location.reload(); }
-      else alert(data.message || "Failed to save project");
+        if (data.success) { 
+            openInfoModal("Success", `<p>Project "<b>${name}</b>" saved successfully.</p>`);
+            updateLiveFeed(`Project "${name}" saved`);
+        } else {
+            openInfoModal("Save Failed", `<p style='color: #ff6b6b;'>${data.message || "Failed to save project."}</p>`);
+        }
     })
-    .catch(err => { console.error(err); alert("Server error while saving project"); });
+    .catch(err => { 
+        console.error(err); 
+        openInfoModal("Server Error", "<p style='color: #ff6b6b;'>Server error while saving project.</p>"); 
+    });
 }
 
 async function uploadProject() {
@@ -393,7 +422,7 @@ async function uploadProject() {
     const pipeline = Array.from(blocks.values()).map(b => b.type);
 
     if (pipeline.length === 0) {
-      alert("Pipeline is empty");
+      openInfoModal("Warning", "<p style='color: #ffbd2e;'>Pipeline is empty. Please add blocks first.</p>");
       return;
     }
 
@@ -423,16 +452,19 @@ async function uploadProject() {
         pipeline[0] === "Color Detection"
       );
 
-    const isValid =
-      isAllowedSingle || isAllowedCombo;
+    const isValid = isAllowedSingle || isAllowedCombo;
 
     if (!isValid) {
-      alert(
-        "Invalid pipeline!\n\nAllowed:\n" +
-        "- Single model only\n" +
-        "- Object Counting + Gap Detection\n" +
-        "- Tracking + Attendance"
-      );
+      const errorMsg = `
+        <p style='color: #ff6b6b; margin-bottom: 10px;'>Invalid pipeline configuration!</p>
+        <p><b>Allowed setups:</b></p>
+        <ul style='color: #c9d1d9; line-height: 1.6;'>
+            <li>Single model only</li>
+            <li>Object Counting + Gap Detection</li>
+            <li>Tracking + Attendance</li>
+        </ul>
+      `;
+      openInfoModal("Pipeline Error", errorMsg);
       return;
     }
 
@@ -447,11 +479,13 @@ async function uploadProject() {
 
     const data = await response.json();
 
+    openInfoModal("Models Applied", `<p>Successfully applied:<br><b>${pipeline.join(" &rarr; ")}</b></p>`);
     updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
     console.log("Backend pipeline:", data);
 
   } catch (err) {
     console.error(err);
+    openInfoModal("Connection Error", "<p style='color: #ff6b6b;'>Backend is not running or unreachable.</p>");
     updateLiveFeed("Backend not running");
   }
 }

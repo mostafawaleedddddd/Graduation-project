@@ -123,7 +123,28 @@
                     style="width: 100%; height: auto; border-radius: 12px;">
             </div>
         </div>
+        <div id="saveProjectModal" class="modal-overlay">
+            <div class="modal-content window-panel">
 
+                <div class="window-header">
+                    <button class="close-btn window-close" onclick="closeSaveModal()">&times;</button>
+                </div>
+
+                <div class="window-body">
+                    <h3>Save Project</h3>
+
+                    <div class="input-group">
+                        <input type="text" id="projectNameInput" placeholder="Enter project name..." autocomplete="off">
+                    </div>
+
+                    <div class="action-buttons window-actions">
+                        <button class="btn-secondary" onclick="closeSaveModal()">Cancel</button>
+                        <button class="btn-primary" onclick="confirmSaveProject()">Save</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
     </div>
 
     <div id="cameraModal" class="modal-overlay">
