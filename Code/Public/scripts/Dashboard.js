@@ -531,66 +531,94 @@ function autoConnectBlocksInOrder(orderedBlockIds) {
   drawConnections();
 }
 //-------------------Attendence Buttons-------------------
-async function showAttendanceList() {
-  try {
-    const res = await fetch("http://127.0.0.1:5000/attendance_results");
-    const data = await res.json();
+// --- Modal Helper Functions ---
+const infoModal = document.getElementById('infoModal');
+const infoTitle = document.getElementById('infoModalTitle');
+const infoContent = document.getElementById('infoModalContent');
 
-    if (!Array.isArray(data) || data.length === 0) {
-      alert("No attendance records yet");
-      return;
-    }
-
-    let msg = "Attendance List:\n\n";
-
-    data.forEach(person => {
-      msg += `${person.name} - ${person.time}\n`;
-    });
-
-    alert(msg);
-
-  } catch (err) {
-    console.error(err);
-    alert("Failed to fetch attendance list");
-  }
+function openInfoModal(title, htmlContent) {
+    infoTitle.innerText = title;
+    infoContent.innerHTML = htmlContent;
+    infoModal.classList.add('show');
 }
-function uploadAttendanceImages() {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.multiple = true;
-  input.accept = "image/*";
 
-  input.onchange = async () => {
-    const files = input.files;
-    const formData = new FormData();
+function closeInfoModal() {
+    infoModal.classList.remove('show');
+}
 
-    for (let file of files) {
-      formData.append("images", file);
+
+window.addEventListener('click', function(event) {
+    if (event.target === infoModal) {
+        closeInfoModal();
     }
+});
 
+async function showAttendanceList() {
     try {
-      const res = await fetch("http://127.0.0.1:5000/upload_attendance_images", {
-        method: "POST",
-        body: formData
-      });
+        const res = await fetch("http://127.0.0.1:5000/attendance_results");
+        const data = await res.json();
 
-      const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+            openInfoModal("Attendance List", "<p>No attendance records yet.</p>");
+            return;
+        }
 
-      console.log("Upload response:", data);
+        let listHTML = '<div class="attendance-list">';
+        data.forEach(person => {
+            listHTML += `
+                <div class="attendance-item">
+                    <span class="attendance-name">${person.name}</span>
+                    <span class="attendance-time">${person.time}</span>
+                </div>
+            `;
+        });
+        listHTML += '</div>';
 
-      if (res.status === 200) {
-        alert("Images uploaded successfully");
-      } else {
-        alert("Upload failed: " + data.message);
-      }
+        openInfoModal("Attendance List", listHTML);
 
     } catch (err) {
-      console.error(err);
-      alert("Server not reachable");
+        console.error(err);
+        openInfoModal("Error", "<p style='color: #ff6b6b;'>Failed to fetch attendance list.</p>");
     }
-  };
+}
 
-  input.click();
+
+function uploadAttendanceImages() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = "image/*";
+
+    input.onchange = async () => {
+        const files = input.files;
+        const formData = new FormData();
+
+        for (let file of files) {
+            formData.append("images", file);
+        }
+
+        try {
+            const res = await fetch("http://127.0.0.1:5000/upload_attendance_images", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+            console.log("Upload response:", data);
+
+            if (res.status === 200) {
+                openInfoModal("Success", "<p>Images uploaded successfully.</p>");
+            } else {
+                openInfoModal("Upload Failed", `<p style='color: #ffbd2e;'>${data.message}</p>`);
+            }
+
+        } catch (err) {
+            console.error(err);
+            openInfoModal("Connection Error", "<p style='color: #ff6b6b;'>Server not reachable.</p>");
+        }
+    };
+
+    input.click();
 }
 
 
