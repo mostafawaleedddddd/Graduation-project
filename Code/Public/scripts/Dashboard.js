@@ -447,6 +447,8 @@ function confirmSaveProject() {
     .then(data => {
         if (data.success) { 
             openInfoModal("Success", `<p>Project "<b>${name}</b>" saved successfully.</p>`);
+            const okBtn = document.querySelector('#infoModal .btn-primary');
+            okBtn.setAttribute("onclick", "closeInfoModalAfterSave()");
             updateLiveFeed(`Project "${name}" saved`);
         } else {
             openInfoModal("Save Failed", `<p style='color: #ff6b6b;'>${data.message || "Failed to save project."}</p>`);
@@ -664,7 +666,10 @@ function openInfoModal(title, htmlContent) {
 function closeInfoModal() {
     infoModal.classList.remove('show');
 }
-
+function closeInfoModalAfterSave() {
+    infoModal.classList.remove('show');
+    location.reload();
+}
 
 window.addEventListener('click', function(event) {
     if (event.target === infoModal) {
