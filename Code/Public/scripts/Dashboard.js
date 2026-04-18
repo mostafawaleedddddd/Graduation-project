@@ -583,39 +583,51 @@ function loadProject(projectId) {
     })
     .catch(err => console.error(err));
 }
-async function deleteSelectedProject() {
-  const select = document.getElementById('projectSelect');
-  if (!select) return;
 
-  const projectId = select.value;
-  if (!projectId) {
-    openInfoModal('Delete Project', '<p>Please select a project first.</p>');
-    return;
-  }
+function deleteSelectedProject() {
+    const select = document.getElementById('projectSelect');
+    if (!select) return;
 
-  const projectName = select.selectedOptions[0]?.textContent || 'Selected project';
-  if (!confirm(`Delete project "${projectName}"? This cannot be undone.`)) return;
-
-  try {
-    const res = await fetch(`/user/projects/${projectId}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-
-    const data = await res.json();
-    if (!data.success) {
-      openInfoModal('Delete Failed', `<p style='color: #ff6b6b;'>${data.message || 'Failed to delete project.'}</p>`);
-      return;
+    const projectId = select.value;
+    if (!projectId) {
+        openInfoModal('Delete Project', '<p>Please select a project first.</p>');
+        return;
     }
 
-    openInfoModal('Project Deleted', `<p>Project "<b>${projectName}</b>" was deleted successfully.</p>`);
-    select.value = '';
-    clearCanvasOnly();
-    loadProjects();
-  } catch (err) {
-    console.error(err);
-    openInfoModal('Delete Failed', '<p style="color: #ff6b6b;">Unable to delete project. Please try again.</p>');
-  }
+    const projectName = select.selectedOptions[0]?.textContent || 'Selected project';
+    openInfoModal('Confirm Delete', `<p>Are you sure you want to delete "<b>${projectName}</b>"? This cannot be undone.</p>`);
+    const okBtn = document.querySelector('#infoModal .btn-primary');
+    okBtn.innerText = "Delete";
+    okBtn.style.backgroundColor = "#ff4d4d"; 
+    
+    okBtn.setAttribute("onclick", `executeProjectDelete('${projectId}', '${projectName}')`);
+}
+async function executeProjectDelete(projectId, projectName) {
+    try {
+        const res = await fetch(`/user/projects/${projectId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+
+        const data = await res.json();
+        const okBtn = document.querySelector('#infoModal .btn-primary');
+        okBtn.innerText = "OK";
+        okBtn.style.backgroundColor = ""; 
+        okBtn.setAttribute("onclick", "closeInfoModal()");
+
+        if (!data.success) {
+            openInfoModal('Delete Failed', `<p style='color: #ff6b6b;'>${data.message || 'Failed to delete project.'}</p>`);
+            return;
+        }
+        openInfoModal('Project Deleted', `<p>Project "<b>${projectName}</b>" was deleted successfully.</p>`);
+        
+        const successBtn = document.querySelector('#infoModal .btn-primary');
+        successBtn.setAttribute("onclick", "location.reload()");
+
+    } catch (err) {
+        console.error(err);
+        openInfoModal('Delete Failed', '<p style="color: #ff6b6b;">Unable to delete project. Please try again.</p>');
+    }
 }
 function clearCanvasOnly() {
   blocks.forEach(b => b.element.remove());
