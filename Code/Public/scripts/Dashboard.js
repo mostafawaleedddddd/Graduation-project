@@ -32,6 +32,7 @@ async function addCamera() {
     await fetch('/user/addCamera', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ name, url })
     });
 
@@ -74,9 +75,16 @@ async function applyCameraSelection(cameraId, url) {
   });
 
   const pipeline = cameraPipelines[cameraId] || [];
-  clearCanvasBlocks();
   renderProjectBlocks(pipeline);
   startCamera();
+}
+
+function ensureCameraSelected() {
+  if (currentCameraId) return true;
+  const select = document.getElementById('cameraSelect');
+  if (select && select.value) return true;
+  openInfoModal("Camera Required", "<p style='color: #ffbd2e;'>Please select a camera before adding models or uploading the pipeline.</p>");
+  return false;
 }
 
 document.getElementById("cameraSelect").addEventListener("change", async function () {
@@ -137,6 +145,7 @@ const BLOCK_H = 80;
 canvas.addEventListener('dragover', e => e.preventDefault());
 canvas.addEventListener('drop', e => {
   e.preventDefault();
+  if (!ensureCameraSelected()) return;
   const type = e.dataTransfer.getData('text/plain');
   if (!type) return;
   const rect = canvas.getBoundingClientRect();
@@ -361,6 +370,37 @@ function deleteBlock(id) {
   }
   drawConnections();
   updateLiveFeed('Block removed');
+
+  // Update backend pipeline after block removal
+  updateBackendPipeline();
+}
+
+async function updateBackendPipeline() {
+  try {
+    const pipeline = Array.from(blocks.values()).map(b => b.type);
+
+    // Send updated pipeline to backend (even if empty)
+    const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pipeline, camera_id: currentCameraId || "default" })
+    });
+
+    if (!response.ok) throw new Error("Server error");
+
+    const data = await response.json();
+    console.log("Backend pipeline updated:", data);
+
+    if (pipeline.length > 0) {
+      updateLiveFeed("Pipeline updated: " + pipeline.join(" → "));
+    } else {
+      updateLiveFeed("All models stopped");
+    }
+
+  } catch (err) {
+    console.error("Failed to update backend pipeline:", err);
+    updateLiveFeed("Backend update failed");
+  }
 }
 
 /* ================= LIVE FEED LOG ================= */
@@ -400,6 +440,7 @@ function confirmSaveProject() {
     fetch('/user/projectsCreate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name, pipeline })
     })
     .then(res => res.json())
@@ -420,6 +461,10 @@ function confirmSaveProject() {
 async function uploadProject() {
   try {
     const pipeline = Array.from(blocks.values()).map(b => b.type);
+
+    if (!ensureCameraSelected()) {
+      return;
+    }
 
     if (pipeline.length === 0) {
       openInfoModal("Warning", "<p style='color: #ffbd2e;'>Pipeline is empty. Please add blocks first.</p>");
@@ -504,11 +549,18 @@ if (logoutBtn) {
 
 /* ================= PROJECTS ================= */
 function loadProjects() {
-  fetch('/user/Getprojects')
+  const select = document.getElementById('projectSelect');
+  if (!select) return;
+  select.innerHTML = '';
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = 'Select Project';
+  select.appendChild(defaultOption);
+
+  fetch('/user/Getprojects', { credentials: 'include' })
     .then(res => res.json())
     .then(data => {
       if (!data.success) { alert("Failed to load projects"); return; }
-      const select = document.getElementById('projectSelect');
       data.projects.forEach(project => {
         const opt = document.createElement('option');
         opt.value = project._id;
@@ -520,7 +572,7 @@ function loadProjects() {
 }
 
 function loadProject(projectId) {
-  fetch(`/user/projects/${projectId}`)
+  fetch(`/user/projects/${projectId}`, { credentials: 'include' })
     .then(res => res.json())
     .then(data => {
       if (!data.success) { alert("Failed to load project"); return; }
@@ -528,7 +580,40 @@ function loadProject(projectId) {
     })
     .catch(err => console.error(err));
 }
+async function deleteSelectedProject() {
+  const select = document.getElementById('projectSelect');
+  if (!select) return;
 
+  const projectId = select.value;
+  if (!projectId) {
+    openInfoModal('Delete Project', '<p>Please select a project first.</p>');
+    return;
+  }
+
+  const projectName = select.selectedOptions[0]?.textContent || 'Selected project';
+  if (!confirm(`Delete project "${projectName}"? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch(`/user/projects/${projectId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      openInfoModal('Delete Failed', `<p style='color: #ff6b6b;'>${data.message || 'Failed to delete project.'}</p>`);
+      return;
+    }
+
+    openInfoModal('Project Deleted', `<p>Project "<b>${projectName}</b>" was deleted successfully.</p>`);
+    select.value = '';
+    clearCanvasOnly();
+    loadProjects();
+  } catch (err) {
+    console.error(err);
+    openInfoModal('Delete Failed', '<p style="color: #ff6b6b;">Unable to delete project. Please try again.</p>');
+  }
+}
 function clearCanvasOnly() {
   blocks.forEach(b => b.element.remove());
   blocks.clear();
@@ -659,6 +744,11 @@ function uploadAttendanceImages() {
 document.addEventListener('DOMContentLoaded', () => {
   loadProjects();
   const dropdown = document.getElementById('projectSelect');
+  const deleteBtn = document.getElementById('deleteProjectBtn');
+  if (deleteBtn) {
+    deleteBtn.disabled = true;
+    deleteBtn.style.opacity = '0.5';
+  }
   if (!dropdown) return;
 
   fetch('/user/getCameras')
@@ -693,6 +783,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   dropdown.addEventListener('change', () => {
     const projectId = dropdown.value;
+    const deleteBtn = document.getElementById('deleteProjectBtn');
+    if (deleteBtn) {
+      deleteBtn.disabled = !projectId;
+      deleteBtn.style.opacity = projectId ? '1' : '0.5';
+    }
     if (!projectId) return;
     loadProject(projectId);
     localStorage.setItem('activeProjectId', projectId);

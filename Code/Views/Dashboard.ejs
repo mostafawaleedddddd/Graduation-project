@@ -32,9 +32,12 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <h3>Functions</h3>
-            <select id="projectSelect" class="live-feed-select">
-                <option value="">Select Project</option>
-            </select>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <select id="projectSelect" class="live-feed-select">
+                    <option value="">Select Project</option>
+                </select>
+                <button id="deleteProjectBtn" class="delete-btn" onclick="deleteSelectedProject()">🗑️</button>
+            </div>
 
 
             <div class="functionality" draggable="true" data-type="Object Detection">
