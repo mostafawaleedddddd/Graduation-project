@@ -75,6 +75,7 @@ async function applyCameraSelection(cameraId, url) {
   });
 
   const pipeline = cameraPipelines[cameraId] || [];
+  clearCanvasBlocks();
   renderProjectBlocks(pipeline);
   startCamera();
 }
