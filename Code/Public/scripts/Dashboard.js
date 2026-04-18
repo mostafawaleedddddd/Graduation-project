@@ -108,14 +108,12 @@ function startCamera() {
 window.onload = startCamera;
 
 async function activateParkingMode() {
-  // 1. Initialize parking (this opens OpenCV window)
   await fetch("http://127.0.0.1:5000/init_parking", {
     method: "POST"
   });
 
   alert("Draw parking areas in the opened window, then press ESC");
 
-  // 2. Activate pipeline AFTER setup
   await fetch("http://127.0.0.1:5000/set_pipeline", {
     method: "POST",
     headers: {
@@ -138,7 +136,6 @@ let draggedBlock = null;
 let linking = false;
 let linkingFromBlock = null;
 
-// Block size constants — must match CSS
 const BLOCK_W = 140;
 const BLOCK_H = 80;
 
@@ -166,10 +163,7 @@ function createBlock(type, x, y) {
   block.className = 'block';
   block.id = id;
 
-  // 🔥 DEFAULT controls
   let extraButtons = "";
-
-  // ✅ ADD SPECIAL BUTTONS FOR ATTENDANCE
   if (type === "Attendance") {
     extraButtons = `
       <button class="list-btn">List</button>
@@ -201,11 +195,9 @@ function createBlock(type, x, y) {
 
   blocks.set(id, { id, type, element: block, x: bx, y: by, w, h });
 
-  // 🔥 EXISTING BUTTONS
   block.querySelector('.link-btn').onclick = () => toggleLinking(id);
   block.querySelector('.delete-btn').onclick = () => deleteBlock(id);
 
-  // ✅ NEW BUTTON EVENTS (ONLY FOR ATTENDANCE)
   if (type === "Attendance") {
     block.querySelector('.list-btn').onclick = () => showAttendanceList();
     block.querySelector('.images-btn').onclick = () => uploadAttendanceImages();
@@ -218,8 +210,8 @@ function createBlock(type, x, y) {
 
 /* ================= BLOCK DRAGGING ================= */
 let offsetX, offsetY;
-let cachedCanvasRect = null; // cached on mousedown — avoids getBoundingClientRect every mousemove
-let rafPending = false;      // RAF gate — only one draw per animation frame
+let cachedCanvasRect = null; 
+let rafPending = false;      
 
 function makeBlockDraggable(id) {
   const el = document.getElementById(id);
@@ -229,7 +221,6 @@ function makeBlockDraggable(id) {
     e.preventDefault();
     draggedBlock = id;
 
-    // Cache canvas rect once on mousedown instead of every mousemove
     cachedCanvasRect = canvas.getBoundingClientRect();
 
     const rect = el.getBoundingClientRect();
@@ -239,7 +230,6 @@ function makeBlockDraggable(id) {
   });
 }
 
-// ONE global mousemove
 document.addEventListener('mousemove', e => {
   if (!draggedBlock) return;
 
@@ -249,13 +239,11 @@ document.addEventListener('mousemove', e => {
   const b = blocks.get(draggedBlock);
   if (!b) return;
 
-  // Update position immediately (no lag on the block itself)
   b.element.style.left = `${x}px`;
   b.element.style.top  = `${y}px`;
   b.x = x;
   b.y = y;
 
-  // Throttle SVG redraws to once per animation frame
   if (!rafPending) {
     rafPending = true;
     requestAnimationFrame(() => {
@@ -328,11 +316,9 @@ function createConnection(from, to) {
 }
 
 function drawConnections() {
-  // Reuse existing path elements instead of removing and recreating them
   const existingPaths = svg.querySelectorAll('path');
   const validConnections = connections.filter(c => blocks.has(c.from) && blocks.has(c.to));
 
-  // Remove excess paths if connections were deleted
   for (let i = existingPaths.length - 1; i >= validConnections.length; i--) {
     existingPaths[i].remove();
   }
@@ -349,17 +335,14 @@ function drawConnections() {
 
     let path = existingPaths[i];
     if (!path) {
-      // Create only if we don't have one for this slot
       path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('class', 'line');
       svg.appendChild(path);
     }
-    // Just update the d attribute — no DOM add/remove, no reflow
     path.setAttribute('d', d);
   });
 }
 
-// Keep alias so existing calls work
 function updateConnections() { drawConnections(); }
 
 /* ================= DELETE BLOCK ================= */
@@ -372,7 +355,6 @@ function deleteBlock(id) {
   drawConnections();
   updateLiveFeed('Block removed');
 
-  // Update backend pipeline after block removal
   updateBackendPipeline();
 }
 
@@ -380,7 +362,6 @@ async function updateBackendPipeline() {
   try {
     const pipeline = Array.from(blocks.values()).map(b => b.type);
 
-    // Send updated pipeline to backend (even if empty)
     const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -664,7 +645,6 @@ function autoConnectBlocksInOrder(orderedBlockIds) {
   }
   drawConnections();
 }
-//-------------------Attendence Buttons-------------------
 // --- Modal Helper Functions ---
 const infoModal = document.getElementById('infoModal');
 const infoTitle = document.getElementById('infoModalTitle');
@@ -689,6 +669,7 @@ window.addEventListener('click', function(event) {
         closeInfoModal();
     }
 });
+//-------------------Attendence Buttons-------------------
 
 async function showAttendanceList() {
     try {

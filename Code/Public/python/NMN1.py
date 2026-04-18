@@ -142,7 +142,6 @@ class ShelfOrchestrator:
         Returns annotated frame
         """
 
-        # IMPORTANT FIX (your new format)
         _, product_boxes = self.product_detector.process(frame)
 
         frame, gap_boxes = self.gap_detector.process(frame)
@@ -151,7 +150,6 @@ class ShelfOrchestrator:
 
         out = frame.copy()
 
-        # Draw products (blue)
         for x1, y1, x2, y2 in surviving_products:
             cv2.rectangle(
                 out,

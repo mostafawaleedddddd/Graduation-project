@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-# ================== COLOR RANGES ==================
+
 COLOR_RANGES = {
     'red': [
         (np.array([0, 120, 70]), np.array([10, 255, 255])),
@@ -31,7 +31,7 @@ COLOR_DISPLAY = {
 
 DEFAULT_COLORS = ['red', 'green', 'blue', 'yellow', 'orange']
 
-# ================== INTERNAL HELPERS ==================
+
 def _detect_color(frame, color_name):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
@@ -67,7 +67,7 @@ def _draw_detections(frame, color_name, contours, min_area):
             2
         )
 
-# ================== PUBLIC PIPELINE FUNCTION ==================
+
 def apply_color_detection(frame, config=None):
     """
     frame: OpenCV BGR frame

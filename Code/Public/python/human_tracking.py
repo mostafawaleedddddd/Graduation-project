@@ -13,12 +13,9 @@ class HumanTracker:
     ):
         self.model = YOLO(model_path)
         self.reid = ReID()
-
         self.conf = conf
         self.iou = iou
         self.tracker_cfg = tracker_cfg
-
-        # Mapping: YOLO track ID → persistent ReID ID
         self.id_map = {}
         self.next_reid_id = 1
 
@@ -27,7 +24,7 @@ class HumanTracker:
             frame,
             persist=True,
             tracker=self.tracker_cfg,
-            classes=[0],      # person class
+            classes=[0],     
             conf=self.conf,
             iou=self.iou
         )
@@ -43,13 +40,9 @@ class HumanTracker:
 
             yolo_id = int(box.id)
             x1, y1, x2, y2 = map(int, box.xyxy[0])
-
-            # Extract appearance embedding
             emb = self.reid.extract(frame, (x1, y1, x2, y2))
             if emb is None:
                 continue
-
-            # Assign persistent ID
             if yolo_id not in self.id_map:
                 matched_id = self.reid.match(emb)
 
@@ -61,8 +54,6 @@ class HumanTracker:
                     self.next_reid_id += 1
 
             reid_id = self.id_map[yolo_id]
-
-            # Draw bounding box + persistent ID
             cv2.rectangle(
                 frame,
                 (x1, y1),

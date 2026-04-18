@@ -56,7 +56,6 @@ class ObjectCounterBlock:
                 x1, y1, x2, y2 = map(int, box)
                 detections.append((x1, y1, x2, y2))
 
-                # Draw plain bounding box (no label)
                 cv2.rectangle(output_frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
         return output_frame, detections

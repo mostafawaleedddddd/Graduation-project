@@ -21,7 +21,7 @@ class ReID:
             )
         ])
 
-        self.memory = {}  # track_id → embedding
+        self.memory = {}  
 
     def extract(self, frame, box):
         x1, y1, x2, y2 = map(int, box)

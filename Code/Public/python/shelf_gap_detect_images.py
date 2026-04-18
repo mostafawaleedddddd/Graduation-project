@@ -6,7 +6,6 @@ from huggingface_hub import hf_hub_download
 from ultralytics import YOLO
 
 
-# ================= CONFIG =================
 @dataclass
 class GapConfig:
     hf_repo_id: str = "akul-29/Retail-Shelf-Gap-Detection_Model"
@@ -15,7 +14,6 @@ class GapConfig:
     iou: float = 0.5
 
 
-# ================= MODEL LOADING =================
 def find_weights_file(repo_id: str, preferred: str | None) -> str:
     if preferred:
         return preferred
@@ -43,7 +41,6 @@ def load_model(cfg: GapConfig) -> YOLO:
     return YOLO(local_path)
 
 
-# ================= UTILS =================
 def annotate(frame: np.ndarray, dets: list[dict[str, Any]]) -> np.ndarray:
     out = frame.copy()
 
@@ -66,7 +63,6 @@ def annotate(frame: np.ndarray, dets: list[dict[str, Any]]) -> np.ndarray:
     return out
 
 
-# ================= PIPELINE CLASS =================
 class ShelfGapDetector:
     def __init__(self, cfg: GapConfig | None = None):
         self.cfg = cfg or GapConfig()

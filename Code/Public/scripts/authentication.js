@@ -22,12 +22,10 @@ function togglePassword(inputId, eye) {
   const icon = eye.querySelector("i");
 
   if (input.type === "password") {
-    // SHOW password
     input.type = "text";
     icon.classList.remove("fa-eye");
     icon.classList.add("fa-eye-slash");
   } else {
-    // HIDE password
     input.type = "password";
     icon.classList.remove("fa-eye-slash");
     icon.classList.add("fa-eye");
@@ -36,7 +34,6 @@ function togglePassword(inputId, eye) {
 
 
 
-/* AUTO SWITCH FROM URL */
 document.addEventListener("DOMContentLoaded", () => {
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode");

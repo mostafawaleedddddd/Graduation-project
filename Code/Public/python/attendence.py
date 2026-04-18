@@ -23,9 +23,7 @@ class AttendanceSystem:
 
         self._load_images()
 
-    # ==============================
-    # LOAD & ENCODE DATABASE
-    # ==============================
+
     def _load_images(self):
 
         for file in os.listdir(self.path):
@@ -49,9 +47,7 @@ class AttendanceSystem:
 
         print("✅ Loaded Faces:", self.classNames)
 
-    # ==============================
-    # MARK ATTENDANCE
-    # ==============================
+
     def _mark_attendance(self, name):
 
         if name not in self.marked_names:
@@ -70,9 +66,7 @@ class AttendanceSystem:
 
             print("Attendance Marked:", record)
 
-    # ==============================
-    # MAIN PROCESS
-    # ==============================
+
     def process(self, frame):
 
         faces = self.app.get(frame)
@@ -110,9 +104,7 @@ class AttendanceSystem:
 
         return frame
 
-    # ==============================
-    # GET RESULTS
-    # ==============================
+
     def get_results(self):
         return self.attendance_log
 

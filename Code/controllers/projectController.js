@@ -40,7 +40,6 @@ async function createProject(req, res) {
   }
 }
 
-/* ================= GET ALL PROJECTS ================= */
 async function getUserProjects(req, res) {
   try {
     if (!req.session.user) {
@@ -62,7 +61,6 @@ async function getUserProjects(req, res) {
   }
 }
 
-/* ================= GET PROJECT BY ID ================= */
 async function getProjectById(req, res) {
   try {
     if (!req.session.user) {
@@ -91,7 +89,6 @@ async function getProjectById(req, res) {
   }
 }
 
-/* ================= DELETE PROJECT ================= */
 async function deleteProject(req, res) {
   try {
     if (!req.session.user) {

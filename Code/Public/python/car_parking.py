@@ -11,9 +11,6 @@ class ParkingManagementBlock:
         self.model_path = "best.pt"
         self.json_path = "bounding_boxes.json"
 
-    # ==============================
-    # RUN SETUP (NON-BLOCKING)
-    # ==============================
     def run_setup(self):
         if self.setting_up:
             return
@@ -39,9 +36,6 @@ class ParkingManagementBlock:
 
         threading.Thread(target=setup_task, daemon=True).start()
 
-    # ==============================
-    # PROCESS FRAME
-    # ==============================
     def process(self, frame):
 
         # 🔥 If not initialized → trigger setup ONCE

@@ -23,11 +23,8 @@ class LiveStreamServer:
 
     def __init__(self):
 
-        # ================== APP ==================
         self.app = Flask(__name__)
         CORS(self.app)
-
-        # ================== MODELS ==================
         self.model = YOLO("yolov8s.pt")
         self.human_tracker = HumanTracker()
         self.object_counter = ObjectCounterBlock()
@@ -37,35 +34,22 @@ class LiveStreamServer:
         self.parking_model = ParkingManagementBlock()
         self.heatmap = HeatmapBlock()
         self.shelf_orchestrator = ShelfOrchestrator()
-
-        # ================== PIPELINE ==================
         self.pipeline = []
         self.camera_pipelines = {"default": []}
-
-        # ================== CAMERA ==================
         self.camera_source = 1
         self.camera_sources = {"default": self.camera_source}
         self.current_camera_id = "default"
         self.cap = None
-
-        # ================== STATE ==================
         self.raw_frame = None
         self.processed_frame = None
         self.lock = threading.Lock()
-
         self.running = True
         self.camera_thread = None
-
         self.FPS = 20
-
-        # ================== ROUTES ==================
         self.setup_routes()
-
-        # ================== START THREADS ==================
         self.start_camera_thread()
         threading.Thread(target=self.processing_loop, daemon=True).start()
 
-    # ================== START CAMERA THREAD ==================
     def start_camera_thread(self):
         if self.camera_thread and self.camera_thread.is_alive():
             print("⚠️ Camera thread already running")
@@ -77,7 +61,6 @@ class LiveStreamServer:
         )
         self.camera_thread.start()
 
-    # ================== CAMERA LOOP ==================
     def camera_loop(self):
 
         print("📷 Camera thread started")
@@ -131,8 +114,6 @@ class LiveStreamServer:
 
             with self.lock:
                 self.raw_frame = frame.copy()
-
-    # ================== PROCESSING LOOP ==================
     def processing_loop(self):
         while True:
 
@@ -189,7 +170,6 @@ class LiveStreamServer:
 
             time.sleep(1 / self.FPS)
 
-    # ================== STREAM ==================
     def generate_frames(self):
 
         while True:
@@ -211,7 +191,6 @@ class LiveStreamServer:
                 b"\r\n"
             )
 
-    # ================== ROUTES ==================
     def setup_routes(self):
 
         @self.app.route("/video")
@@ -235,7 +214,6 @@ class LiveStreamServer:
             if camera_id == self.current_camera_id:
                 self.pipeline = new_pipeline
 
-                # 🔥 PARKING SETUP (NON-BLOCKING)
                 if "Parking Management" in new_pipeline:
                     print("🅿️ Parking setup starting...")
 
@@ -249,7 +227,6 @@ class LiveStreamServer:
 
             return jsonify({"status": "ok", "camera_id": camera_id, "pipeline": new_pipeline})
 
-        # ================== CAMERA SWITCH ==================
         @self.app.route("/set_camera", methods=["POST"])
         def set_camera():
             data = request.json
@@ -287,7 +264,6 @@ class LiveStreamServer:
 
             return jsonify({"status": "camera switched", "camera_id": camera_id, "pipeline": self.pipeline})
 
-        # ================== ATTENDANCE ==================
         @self.app.route("/attendance_results")
         def attendance_results():
             return jsonify(self.attendance.get_results())
@@ -314,14 +290,10 @@ class LiveStreamServer:
                 if file.filename == "":
                     continue
 
-                # ✅ use original filename directly (NO UUID)
                 name = os.path.splitext(file.filename)[0]
                 filepath = os.path.join("attendance_images", file.filename)
-
                 file.save(filepath)
                 saved_files.append(filepath)
-
-                # ✅ update system immediately
                 self.attendance.add_image(filepath, name)
 
             return jsonify({
@@ -329,7 +301,6 @@ class LiveStreamServer:
                 "saved": saved_files
             }), 200
 
-    # ================== RUN ==================
     def run(self):
         print("🚀 Server running...")
         self.app.run(

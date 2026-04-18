@@ -35,7 +35,6 @@ class HeatmapProcessor:
 
         alpha = (heatmap_uint8 / 255.0) ** self.config["ALPHA_POWER"]
 
-        # Raised threshold so faint/residual heat becomes fully transparent
         threshold_mask = (heatmap_uint8 > 30).astype(np.float32)
         alpha = alpha * threshold_mask
 
@@ -57,26 +56,16 @@ class HeatmapBlock:
     def __init__(self):
 
         self.config = {
-            # Slower decay (0.92 vs 0.7) — heat fades naturally over ~12 frames
-            # Increase toward 0.99 for longer session-wide memory
+
             "DECAY": 0.92,
-
-            "BLUR_R": 35,           # Reduced spread for smaller heatmap
-            "BLUR_S": 15,
-
-            # Smaller footprint radius
+            "BLUR_R": 35,           
+            "BLUR_S": 15,  
             "HEAT_RADIUS": 18,
-
-            # Higher value = faint areas become transparent, only hot spots glow
             "ALPHA_POWER": 0.6,
-
             "ALPHA_BLEND": 0.85,
             "COLORMAP": cv2.COLORMAP_JET,
-
-            # Higher percentile = only truly busy areas stay bright
             "NORM_PERCENTILE": 97,
-
-            "MODE": "retail"        # or "cars"
+            "MODE": "retail" 
         }
 
         self.classes = {
@@ -122,30 +111,21 @@ class HeatmapBlock:
             if is_retail or is_cars:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 cx = (x1 + x2) // 2
-
-                # FIX: Only mark the foot/bottom of the bounding box instead of
-                # sampling the full body height. This ensures heat accumulates
-                # on the floor where people actually stand/walk, not their torso.
                 foot_y = y2
                 current_footprints.append((cx, foot_y, conf))
 
                 detection_count += 1
                 boxes_to_draw.append((x1, y1, x2, y2, conf, is_retail))
 
-        # Update heatmap
+
         self.processor.update(current_footprints)
-
-        # Apply overlay
         overlay = self.processor.apply_overlay(frame)
-
-        # Draw boxes on top
         for (x1, y1, x2, y2, conf, is_ret) in boxes_to_draw:
             cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), 2)
             label = f"{'Person' if is_ret else 'Vehicle'} {conf:.2f}"
             cv2.putText(overlay, label, (x1, y1 - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-        # HUD
         cv2.putText(overlay, f"Mode: {self.config['MODE'].upper()}", (10, 25),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 

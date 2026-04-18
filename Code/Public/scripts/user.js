@@ -1,4 +1,3 @@
-// Toggle password visibility
 function togglePassword(inputId, icon) {
   const input = document.getElementById(inputId);
   if (input.type === "password") {
@@ -10,7 +9,6 @@ function togglePassword(inputId, icon) {
   }
 }
 
-// Show Signup form
 function showSignup() {
   document.getElementById('login-form').classList.add('hidden');
   document.getElementById('signup-form').classList.remove('hidden');
@@ -63,7 +61,6 @@ document.addEventListener("DOMContentLoaded", () => {
       passed++;
     } else rules.space.innerHTML = "❌ No spaces";
 
-    // Hide popup ONLY when all pass (like image)
     if (passed === 6) {
       popup.classList.add("hidden");
     } else {
@@ -71,7 +68,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Show popup when user interacts
   passwordInput.addEventListener("focus", () => {
     popup.classList.remove("hidden");
   });
@@ -86,9 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 });
 
-/* ============================
-   FORM VALIDATION (CLEANED)
-============================ */
+
 function validateSignup() {
   const form = document.getElementById('signup-form');
 
@@ -107,7 +101,6 @@ function validateSignup() {
     return false;
   }
 
-  // Final hard check (popup already guided user)
   const passwordRegex =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[^\s]{8,20}$/;
 
@@ -202,10 +195,8 @@ document.addEventListener("DOMContentLoaded", () => {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          // ✅ login success
-          window.location.href = "/user"; // dashboard
+          window.location.href = "/user"; 
         } else {
-          // ❌ wrong credentials
           alert(data.message || "Wrong credentials");
         }
       })
