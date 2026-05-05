@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ModuVision | Authentication</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/Navbar.css">
   <link rel="stylesheet" href="/css/authentication.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -10,9 +14,19 @@
 </head>
 <body>
   <script src="/scripts/user.js"></script>
-  
+
   <%- include("partials/navbar") %>
 
+  <!-- CUSTOM CURSOR -->
+  <div class="cursor" id="cursor"></div>
+  <div class="cursor-ring" id="cursorRing"></div>
+
+  <!-- GRID OVERLAY -->
+  <div class="grid-overlay"></div>
+
+  <!-- AMBIENT GLOW ORBS -->
+  <div class="glow-orb glow-orb--left"></div>
+  <div class="glow-orb glow-orb--right"></div>
 
   <!-- BACKGROUND VIDEO -->
   <video autoplay muted loop playsinline class="bg-video">
@@ -20,88 +34,236 @@
   </video>
   <div class="overlay"></div>
 
+  <!-- FLOATING PARTICLES CANVAS -->
+  <canvas id="auth-particles"></canvas>
 
   <!-- AUTH CARD -->
   <div class="auth-container">
 
+    <!-- CARD HEADER LOGO -->
+    <div class="auth-logo">
+      <div class="auth-logo-icon">
+        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">
+          <circle cx="20" cy="20" r="8" stroke="#00C6FF" stroke-width="1.8"/>
+          <circle cx="20" cy="20" r="3" fill="#00C6FF"/>
+          <line x1="20" y1="4" x2="20" y2="12" stroke="#00C6FF" stroke-width="1.5" stroke-dasharray="2 1"/>
+          <line x1="20" y1="28" x2="20" y2="36" stroke="#00C6FF" stroke-width="1.5" stroke-dasharray="2 1"/>
+          <line x1="4" y1="20" x2="12" y2="20" stroke="#8E2DE2" stroke-width="1.5" stroke-dasharray="2 1"/>
+          <line x1="28" y1="20" x2="36" y2="20" stroke="#8E2DE2" stroke-width="1.5" stroke-dasharray="2 1"/>
+          <circle cx="20" cy="4" r="2.5" fill="#8E2DE2"/>
+          <circle cx="20" cy="36" r="2.5" fill="#8E2DE2"/>
+          <circle cx="4" cy="20" r="2.5" fill="#8E2DE2"/>
+          <circle cx="36" cy="20" r="2.5" fill="#8E2DE2"/>
+        </svg>
+      </div>
+      <span class="auth-logo-text">Modu<span>Vision</span></span>
+    </div>
+
+    <!-- STATUS BADGE -->
+    <div class="auth-badge">
+      <span class="auth-badge-dot"></span>
+      System Online · Secure Connection
+    </div>
+
+    <!-- TABS -->
     <div class="auth-tabs">
-      <button class="tab active" onclick="showLogin()">Login</button>
-      <button class="tab" onclick="showSignup()">Sign Up</button>
+      <button class="tab active" onclick="showLogin()">
+        <span class="tab-icon">
+          <svg viewBox="0 0 18 18" fill="none" width="14" height="14">
+            <circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M2 17c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+        </span>
+        Login
+      </button>
+      <button class="tab" onclick="showSignup()">
+        <span class="tab-icon">
+          <svg viewBox="0 0 18 18" fill="none" width="14" height="14">
+            <circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M2 17c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <line x1="14" y1="2" x2="14" y2="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <line x1="12" y1="4" x2="16" y2="4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+        </span>
+        Sign Up
+      </button>
     </div>
 
     <!-- LOGIN FORM -->
-    <form id="login-form" class="auth-form">
-      <h2>Welcome Back</h2>
-      <p>Log in to access your ModuVision dashboard.</p>
-
-      <input type="email" placeholder="Email address" required />
-
-      <div class="password-wrapper">
-        <input type="password" id="login-password" placeholder="Password" required />
-        <span class="eye" onclick="togglePassword('login-password', this)">
-          <i class="fa-solid fa-eye"></i>
-        </span>
+    <form id="login-form" class="auth-form" autocomplete="off">
+      <div class="form-header">
+        <div class="section-tag">Access Control</div>
+        <h2 class="form-title">Welcome Back</h2>
+        <p class="form-sub">Log in to access your ModuVision dashboard.</p>
       </div>
 
-      <button type="submit" class="submit-btn">Login</button>
-    </form>
+      <div class="input-group">
+        <label class="input-label">Email Address</label>
+        <div class="input-wrap">
+          <span class="input-icon">
+            <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
+              <rect x="1" y="3.5" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M1 6l8 5 8-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <input type="email" placeholder="you@example.com" required />
+          <span class="input-glow"></span>
+        </div>
+      </div>
 
+      <div class="input-group">
+        <label class="input-label">Password</label>
+        <div class="input-wrap password-wrapper">
+          <span class="input-icon">
+            <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
+              <rect x="3" y="8" width="12" height="9" rx="2" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M6 8V5.5a3 3 0 016 0V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              <circle cx="9" cy="13" r="1.2" fill="currentColor"/>
+            </svg>
+          </span>
+          <input type="password" id="login-password" placeholder="••••••••" required />
+          <span class="eye" onclick="togglePassword('login-password', this)">
+            <i class="fa-solid fa-eye"></i>
+          </span>
+          <span class="input-glow"></span>
+        </div>
+      </div>
+
+      <button type="submit" class="submit-btn">
+        <span class="btn-text">Login</span>
+        <span class="btn-arrow">
+          <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+            <line x1="3" y1="10" x2="17" y2="10" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M12 5l5 5-5 5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="btn-shimmer"></span>
+      </button>
+
+      <p class="form-switch">Don't have an account? <a onclick="showSignup()">Create one</a></p>
+    </form>
 
     <!-- SIGNUP FORM -->
-    <form id="signup-form" class="auth-form hidden">
-      <h2>Create an Account</h2>
-      <p>Start building modular vision workflows.</p>
+    <form id="signup-form" class="auth-form hidden" autocomplete="off">
+      <div class="form-header">
+        <div class="section-tag">New Identity</div>
+        <h2 class="form-title">Create Account</h2>
+        <p class="form-sub">Start building modular vision workflows.</p>
+      </div>
 
-      <input type="text" placeholder="Full name" required />
-      <input type="email" placeholder="Email address" required />
-      <div class="password-box">
-        <input type="text" id="password" placeholder="Password"/>
-
-        <div id="password-popup" class="password-popup hidden">
-          <p><strong>Password must include:</strong></p>
-          <ul>
-            <li id="rule-length">❌ 8–20 characters</li>
-            <li id="rule-upper">❌ At least one capital letter</li>
-            <li id="rule-lower">❌ At least one lowercase letter</li>
-            <li id="rule-number">❌ At least one number</li>
-            <li id="rule-special">❌ At least one special character</li>
-            <li id="rule-space">❌ No spaces</li>
-          </ul>
+      <div class="input-group">
+        <label class="input-label">Full Name</label>
+        <div class="input-wrap">
+          <span class="input-icon">
+            <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
+              <circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M2 17c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <input type="text" placeholder="John Smith" required />
+          <span class="input-glow"></span>
         </div>
       </div>
 
-      <div class="password-wrapper">
-        <input type="password" id="confirm-password" placeholder="Confirm Password" required />
-        <span class="eye" onclick="togglePassword('confirm-password', this)">
-          <i class="fa-solid fa-eye"></i>
+      <div class="input-group">
+        <label class="input-label">Email Address</label>
+        <div class="input-wrap">
+          <span class="input-icon">
+            <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
+              <rect x="1" y="3.5" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M1 6l8 5 8-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <input type="email" placeholder="you@example.com" required />
+          <span class="input-glow"></span>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Password</label>
+        <div class="input-wrap password-box">
+          <span class="input-icon">
+            <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
+              <rect x="3" y="8" width="12" height="9" rx="2" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M6 8V5.5a3 3 0 016 0V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              <circle cx="9" cy="13" r="1.2" fill="currentColor"/>
+            </svg>
+          </span>
+          <input type="text" id="password" placeholder="••••••••" />
+          <span class="input-glow"></span>
+
+          <!-- PASSWORD RULES POPUP -->
+          <div id="password-popup" class="password-popup hidden">
+            <p class="popup-title">Password Requirements</p>
+            <ul>
+              <li id="rule-length"><span class="rule-icon">✕</span> 8–20 characters</li>
+              <li id="rule-upper"><span class="rule-icon">✕</span> At least one capital letter</li>
+              <li id="rule-lower"><span class="rule-icon">✕</span> At least one lowercase letter</li>
+              <li id="rule-number"><span class="rule-icon">✕</span> At least one number</li>
+              <li id="rule-special"><span class="rule-icon">✕</span> At least one special character</li>
+              <li id="rule-space"><span class="rule-icon">✕</span> No spaces allowed</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Confirm Password</label>
+        <div class="input-wrap password-wrapper">
+          <span class="input-icon">
+            <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
+              <rect x="3" y="8" width="12" height="9" rx="2" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M6 8V5.5a3 3 0 016 0V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              <path d="M7 13l1.5 1.5L11 11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <input type="password" id="confirm-password" placeholder="••••••••" required />
+          <span class="eye" onclick="togglePassword('confirm-password', this)">
+            <i class="fa-solid fa-eye"></i>
+          </span>
+          <span class="input-glow"></span>
+        </div>
+      </div>
+
+      <button type="submit" class="submit-btn">
+        <span class="btn-text">Create Account</span>
+        <span class="btn-arrow">
+          <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
+            <line x1="3" y1="10" x2="17" y2="10" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M12 5l5 5-5 5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </span>
-      </div>
+        <span class="btn-shimmer"></span>
+      </button>
 
-      <button type="submit" class="submit-btn">Sign Up</button>
+      <p class="form-switch">Already have an account? <a onclick="showLogin()">Login here</a></p>
     </form>
-    
 
-
-      <div id="error-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-          <div class="modal-header">
-            <img src="https://cdn-icons-png.flaticon.com/512/564/564619.png" alt="Warning" class="error-icon">
-            <span>System Message</span>
-            <button id="close-modal" class="close-x">&times;</button>
+    <!-- ERROR MODAL -->
+    <div id="error-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+              <path d="M12 3L22 21H2L12 3Z" stroke="#FF00CC" stroke-width="1.6" stroke-linejoin="round"/>
+              <line x1="12" y1="10" x2="12" y2="15" stroke="#FF00CC" stroke-width="1.8" stroke-linecap="round"/>
+              <circle cx="12" cy="18" r="1" fill="#FF00CC"/>
+            </svg>
           </div>
-          <div class="modal-body">
-            <p id="modal-message">The specified account already exists.</p>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="modal-btn" onclick="document.getElementById('error-modal').classList.add('hidden')">OK</button>
-          </div>
+          <span class="modal-title">System Message</span>
+          <button id="close-modal" class="close-x" onclick="document.getElementById('error-modal').classList.add('hidden')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="modal-message">The specified account already exists.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="modal-btn" onclick="document.getElementById('error-modal').classList.add('hidden')">Dismiss</button>
         </div>
       </div>
+    </div>
 
-  </div>
+  </div><!-- end .auth-container -->
 
-
-  <!-- AUTH SCRIPT -->
   <script src="/scripts/authentication.js"></script>
 </body>
 </html>

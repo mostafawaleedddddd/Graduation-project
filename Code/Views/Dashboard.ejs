@@ -39,24 +39,23 @@
                 <button id="deleteProjectBtn" class="delete-btn" onclick="deleteSelectedProject()">🗑️</button>
             </div>
 
-
             <div class="functionality" draggable="true" data-type="Object Detection">
                 👁️ Object Detection
             </div>
-
             <div class="functionality" draggable="true" data-type="Color Detection">
                 🎨 Color Detection
             </div>
-
             <div class="functionality" draggable="true" data-type="Tracking">
                 🎯 Tracking
             </div>
             <div class="functionality" draggable="true" data-type="Object Counting">
-                🔢 Object Counting</div>
+                🔢 Object Counting
+            </div>
             <div class="functionality" draggable="true" data-type="Gap Detection">
-                🧱 Gap Detection</div>
+                🧱 Gap Detection
+            </div>
             <div class="functionality" draggable="true" data-type="Attendance">
-                � Attendance
+                🪪 Attendance
             </div>
             <div class="functionality" draggable="true" data-type="Parking Management">
                 🅿️ Parking Management
@@ -66,23 +65,14 @@
             </div>
         </div>
 
-
+        <!-- Info Modal -->
         <div id="infoModal" class="modal-overlay">
             <div class="modal-content window-panel">
-
-                <div class="window-header">
-                    <button class="close-btn window-close" onclick="closeInfoModal()">&times;</button>
-                </div>
-
-                <div class="window-body">
-                    <h3 id="infoModalTitle">Notification</h3>
-
-                    <div id="infoModalContent" class="modal-scroll-area">
-                    </div>
-
-                    <div class="action-buttons window-actions">
-                        <button class="btn-primary" onclick="closeInfoModal()">OK</button>
-                    </div>
+                <button class="close-btn window-close" onclick="closeInfoModal()">&times;</button>
+                <h3 id="infoModalTitle">Notification</h3>
+                <div id="infoModalContent" class="modal-scroll-area"></div>
+                <div class="action-buttons window-actions">
+                    <button class="btn-primary" onclick="closeInfoModal()">OK</button>
                 </div>
             </div>
         </div>
@@ -93,8 +83,8 @@
                 <svg id="connectionSvg">
                     <defs>
                         <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color:#6496ff" />
-                            <stop offset="100%" style="stop-color:#9334ea" />
+                            <stop offset="0%" style="stop-color:#00C6FF" />
+                            <stop offset="100%" style="stop-color:#FF00CC" />
                         </linearGradient>
                     </defs>
                 </svg>
@@ -108,68 +98,56 @@
                     <div class="live-feed-dot"></div>
                     Live Feed
                 </div>
-
                 <div class="live-feed-buttons">
                     <select id="cameraSelect" class="live-feed-select">
                         <option value="">Select Camera</option>
                     </select>
-
                     <button class="live-feed-btn" onclick="openAddCamera()">➕ Add</button>
                     <button class="live-feed-btn" onclick="saveProject()">💾 Save</button>
                     <button class="live-feed-btn" onclick="uploadProject()">📤 Upload</button>
                 </div>
             </div>
-
             <div class="live-feed-content">
-                <!-- CAMERA FEED -->
                 <img id="live-feed" src="http://127.0.0.1:5000/video" alt="Live Camera Feed"
-                    style="width: 100%; height: auto; border-radius: 12px;">
+                    style="width:100%;height:auto;border-radius:8px;">
             </div>
         </div>
+
+        <!-- Save Project Modal -->
         <div id="saveProjectModal" class="modal-overlay">
             <div class="modal-content window-panel">
-
-                <div class="window-header">
-                    <button class="close-btn window-close" onclick="closeSaveModal()">&times;</button>
+                <button class="close-btn window-close" onclick="closeSaveModal()">&times;</button>
+                <h3>Save Project</h3>
+                <div class="input-group">
+                    <input type="text" id="projectNameInput" placeholder="Enter project name..." autocomplete="off">
                 </div>
-
-                <div class="window-body">
-                    <h3>Save Project</h3>
-
-                    <div class="input-group">
-                        <input type="text" id="projectNameInput" placeholder="Enter project name..." autocomplete="off">
-                    </div>
-
-                    <div class="action-buttons window-actions">
-                        <button class="btn-secondary" onclick="closeSaveModal()">Cancel</button>
-                        <button class="btn-primary" onclick="confirmSaveProject()">Save</button>
-                    </div>
+                <div class="action-buttons window-actions">
+                    <button class="btn-secondary" onclick="closeSaveModal()">Cancel</button>
+                    <button class="btn-primary" onclick="confirmSaveProject()">Save</button>
                 </div>
-
             </div>
         </div>
+
     </div>
 
+    <!-- Add Camera Modal -->
     <div id="cameraModal" class="modal-overlay">
         <div class="modal-content">
             <button class="close-btn" onclick="closeAddCamera()">&times;</button>
-
             <h3>Add IP Camera</h3>
-
             <div class="input-group">
                 <input type="text" id="cameraName" placeholder="Camera Name">
             </div>
-
             <div class="input-group">
                 <input type="text" id="cameraUrl" placeholder="RTSP / HTTP URL">
             </div>
-
             <div class="action-buttons">
                 <button class="btn-secondary" onclick="closeAddCamera()">Cancel</button>
                 <button class="btn-primary" onclick="addCamera()">Add Camera</button>
             </div>
         </div>
     </div>
+
     <script src="/scripts/Dashboard.js"></script>
 </body>
 

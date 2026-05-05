@@ -1,103 +1,1500 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>ModuVision</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ModuVision Smart Software</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --blue1: #00C6FF;
+      --blue2: #0072FF;
+      --purple1: #FF00CC;
+      --purple2: #8E2DE2;
+      --navy: #020817;
+      --navy2: #050d1f;
+      --glass: rgba(255,255,255,0.04);
+      --glass-border: rgba(0,198,255,0.18);
+      --text: #e8f4ff;
+      --text-dim: rgba(232,244,255,0.55);
+      --glow-blue: 0 0 30px rgba(0,198,255,0.4);
+      --glow-purple: 0 0 30px rgba(255,0,204,0.35);
+      --radius: 22px;
+    }
 
-  <!-- Shared navbar styles (if needed) -->
-  <link rel="stylesheet" href="/css/Navbar.css">
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  <link rel="stylesheet" href="/css/styles.css">
+    html { scroll-behavior: smooth; }
 
-  <link rel="icon" href="/materials/logo2.png" type="image/x-icon">
+    body {
+      background: var(--navy);
+      color: var(--text);
+      font-family: 'Rajdhani', sans-serif;
+      overflow-x: hidden;
+      cursor: default;
+    }
+
+    /* ─── CUSTOM CURSOR ─────────────────────── */
+    .cursor {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--blue1);
+      position: fixed;
+      top: 0; left: 0;
+      pointer-events: none;
+      z-index: 9999;
+      box-shadow: 0 0 18px var(--blue1), 0 0 40px rgba(0,198,255,0.5);
+      transition: transform 0.1s ease;
+      mix-blend-mode: screen;
+    }
+    .cursor-ring {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 1px solid rgba(0,198,255,0.4);
+      position: fixed;
+      top: 0; left: 0;
+      pointer-events: none;
+      z-index: 9998;
+      transition: transform 0.15s ease, width 0.3s, height 0.3s;
+    }
+
+    /* ─── GRID OVERLAY ─────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,198,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,198,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── NAVBAR ───────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 60px;
+      background: rgba(2,8,23,0.75);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(0,198,255,0.1);
+      transition: padding 0.3s;
+    }
+    nav.scrolled { padding: 12px 60px; }
+    .nav-logo {
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 1.2rem;
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 2px;
+    }
+    .nav-logo span { font-weight: 400; opacity: 0.7; }
+    .nav-links {
+      display: flex;
+      gap: 36px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      transition: color 0.3s;
+      position: relative;
+    }
+    .nav-links a::after {
+      content: '';
+      position: absolute;
+      bottom: -4px; left: 0;
+      width: 0; height: 1px;
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      transition: width 0.3s;
+    }
+    .nav-links a:hover { color: var(--blue1); }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-cta {
+      padding: 10px 28px;
+      border-radius: 50px;
+      background: linear-gradient(135deg, var(--blue2), var(--purple2));
+      color: #fff;
+      text-decoration: none;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      box-shadow: 0 0 25px rgba(0,114,255,0.4);
+      transition: box-shadow 0.3s, transform 0.2s;
+    }
+    .nav-cta:hover {
+      box-shadow: 0 0 40px rgba(0,198,255,0.6), 0 0 80px rgba(142,45,226,0.3);
+      transform: translateY(-2px);
+    }
+
+    /* ─── HERO ─────────────────────────────── */
+    #hero {
+      position: relative;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      overflow: hidden;
+    }
+    #hero-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+    .hero-glow-left {
+      position: absolute;
+      left: -200px; top: 30%;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,198,255,0.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 1;
+      animation: pulseGlow 4s ease-in-out infinite;
+    }
+    .hero-glow-right {
+      position: absolute;
+      right: -200px; top: 20%;
+      width: 700px; height: 700px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,0,204,0.09) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 1;
+      animation: pulseGlow 5s ease-in-out infinite reverse;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.7; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      max-width: 900px;
+      padding: 0 30px;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 20px;
+      border-radius: 50px;
+      border: 1px solid rgba(0,198,255,0.3);
+      background: rgba(0,198,255,0.08);
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--blue1);
+      margin-bottom: 30px;
+      font-family: 'Orbitron', monospace;
+      animation: fadeInDown 0.8s ease forwards;
+    }
+    .hero-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--blue1);
+      box-shadow: 0 0 10px var(--blue1);
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes fadeInDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+
+    .hero-title {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(2.4rem, 5.5vw, 4.5rem);
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      animation: fadeInUp 0.9s 0.2s ease both;
+    }
+    .hero-title .gradient-text {
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 1.15rem;
+      color: var(--text-dim);
+      line-height: 1.7;
+      max-width: 640px;
+      margin: 0 auto 44px;
+      font-weight: 300;
+      animation: fadeInUp 0.9s 0.4s ease both;
+    }
+    .hero-buttons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+      animation: fadeInUp 0.9s 0.6s ease both;
+    }
+    .btn-primary {
+      padding: 16px 44px;
+      border-radius: 50px;
+      background: linear-gradient(135deg, var(--blue1), var(--blue2));
+      color: #fff;
+      text-decoration: none;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      box-shadow: 0 0 30px rgba(0,198,255,0.5), 0 8px 32px rgba(0,114,255,0.3);
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.15) 50%, transparent 70%);
+      transform: translateX(-100%);
+      transition: transform 0.5s;
+    }
+    .btn-primary:hover::before { transform: translateX(100%); }
+    .btn-primary:hover {
+      box-shadow: 0 0 50px rgba(0,198,255,0.7), 0 12px 40px rgba(0,114,255,0.5);
+      transform: translateY(-3px);
+    }
+    .btn-secondary {
+      padding: 15px 44px;
+      border-radius: 50px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.04);
+      backdrop-filter: blur(10px);
+      color: var(--text);
+      text-decoration: none;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-secondary:hover {
+      border-color: rgba(0,198,255,0.5);
+      background: rgba(0,198,255,0.08);
+      box-shadow: var(--glow-blue);
+      transform: translateY(-3px);
+    }
+    .play-icon {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,0.5);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.6rem;
+    }
+    .hero-scroll {
+      position: absolute;
+      bottom: 40px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-dim);
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      animation: fadeInUp 1s 1s ease both;
+    }
+    .scroll-line {
+      width: 1px; height: 50px;
+      background: linear-gradient(180deg, rgba(0,198,255,0.7), transparent);
+      animation: scrollPulse 2s ease-in-out infinite;
+    }
+    @keyframes scrollPulse {
+      0%,100% { opacity: 0.4; transform: scaleY(1); }
+      50% { opacity: 1; transform: scaleY(1.2); }
+    }
+
+    /* ─── SECTIONS COMMON ────────────────── */
+    section { position: relative; z-index: 1; }
+    .section-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 120px 60px;
+    }
+    .section-tag {
+      display: inline-block;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--blue1);
+      margin-bottom: 16px;
+      padding: 5px 16px;
+      border: 1px solid rgba(0,198,255,0.25);
+      border-radius: 50px;
+      background: rgba(0,198,255,0.07);
+    }
+    .section-title {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(1.8rem, 3.5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 20px;
+    }
+    .gradient-text {
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .section-desc {
+      color: var(--text-dim);
+      font-size: 1.05rem;
+      line-height: 1.8;
+      max-width: 600px;
+      font-weight: 300;
+    }
+
+    /* ─── REVEAL / PIPELINE SECTION ─────── */
+    #pipeline {
+      background: linear-gradient(180deg, var(--navy) 0%, #030d1a 100%);
+    }
+    .pipeline-wrapper {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .pipeline-visual {
+      position: relative;
+      height: 480px;
+    }
+    #pipeline-canvas { width: 100%; height: 100%; }
+    .pipeline-nodes {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .p-node {
+      position: absolute;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(16px);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      opacity: 0;
+      transform: scale(0.85) translateY(10px);
+      transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .p-node.visible {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    .p-node:hover {
+      border-color: rgba(0,198,255,0.5);
+      box-shadow: var(--glow-blue), 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .p-node-icon {
+      width: 42px; height: 42px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+    }
+    .p-node-info h4 {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      margin-bottom: 3px;
+    }
+    .p-node-info p { font-size: 0.8rem; color: var(--text-dim); }
+    .n1 { top: 10px; left: 10px; }
+    .n2 { top: 42%; left: 50%; transform: translateX(-50%) scale(0.85) translateY(10px) !important; }
+    .n2.visible { transform: translateX(-50%) scale(1) translateY(0) !important; }
+    .n3 { top: 10px; right: 10px; }
+    .n4 { bottom: 10px; left: 10px; }
+    .n5 { bottom: 10px; right: 10px; }
+
+    .connector-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .conn-line {
+      fill: none;
+      stroke: url(#lineGrad);
+      stroke-width: 1.5;
+      stroke-dasharray: 6 4;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    .conn-line.visible { opacity: 1; animation: dashMove 3s linear infinite; }
+    @keyframes dashMove { to { stroke-dashoffset: -100; } }
+
+    /*.pipeline-info { }*/
+    .pipeline-steps { margin-top: 40px; display: flex; flex-direction: column; gap: 20px; }
+    .step-item {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      padding: 20px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      opacity: 0;
+      transform: translateX(30px);
+      transition: all 0.5s ease;
+    }
+    .step-item.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .step-item:hover {
+      border-color: rgba(0,198,255,0.2);
+      background: rgba(0,198,255,0.06);
+    }
+    .step-num {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.5rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--blue1), var(--purple1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      min-width: 40px;
+      line-height: 1;
+    }
+    .step-text h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+    .step-text p { font-size: 0.88rem; color: var(--text-dim); }
+
+    /* ─── CAMERA SECTION ─────────────────── */
+    #camera {
+      background: linear-gradient(180deg, #030d1a 0%, #06091a 100%);
+    }
+    .camera-wrapper {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .camera-mockup {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid rgba(0,198,255,0.2);
+      box-shadow: var(--glow-blue), 0 30px 80px rgba(0,0,0,0.6);
+    }
+    .camera-screen {
+      background: #0a1628;
+      aspect-ratio: 16/10;
+      position: relative;
+      overflow: hidden;
+    }
+    .cam-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,198,255,0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,198,255,0.06) 1px, transparent 1px);
+      background-size: 30px 30px;
+    }
+    .cam-scanline {
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(0,198,255,0.5), transparent);
+      animation: scanline 4s linear infinite;
+    }
+    @keyframes scanline {
+      0% { top: 0; opacity: 0.8; }
+      100% { top: 100%; opacity: 0; }
+    }
+    .cam-corner {
+      position: absolute;
+      width: 18px; height: 18px;
+      border-color: var(--blue1);
+      border-style: solid;
+      opacity: 0.7;
+    }
+    .cam-corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+    .cam-corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+    .cam-corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+    .cam-corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+
+    .detection-box {
+      position: absolute;
+      border: 1.5px solid;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 0.6rem;
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 1px;
+      opacity: 0;
+      animation: detectionAppear 2s ease-in-out infinite;
+    }
+    .db1 { top: 20%; left: 15%; border-color: #00ff88; color: #00ff88; width: 100px; height: 90px; animation-delay: 0s; }
+    .db2 { top: 35%; right: 20%; border-color: var(--blue1); color: var(--blue1); width: 80px; height: 70px; animation-delay: 0.8s; }
+    .db3 { bottom: 20%; left: 30%; border-color: var(--purple1); color: var(--purple1); width: 70px; height: 60px; animation-delay: 1.4s; }
+    @keyframes detectionAppear {
+      0% { opacity: 0; transform: scale(0.95); }
+      20% { opacity: 1; transform: scale(1); }
+      80% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(0.95); }
+    }
+    .db-label {
+      position: absolute;
+      bottom: -1px; left: -1px;
+      background: currentColor;
+      color: #000;
+      font-size: 0.5rem;
+      padding: 1px 4px;
+      font-weight: 700;
+    }
+    .cam-live {
+      position: absolute;
+      top: 12px; right: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.6rem;
+      color: #ff4444;
+      letter-spacing: 1px;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #ff4444;
+      animation: blink 1s infinite;
+    }
+    .cam-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      background: rgba(0,198,255,0.1);
+    }
+    .cam-stat {
+      background: rgba(2,8,23,0.9);
+      padding: 12px 16px;
+      text-align: center;
+    }
+    .cam-stat-val {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .cam-stat-label { font-size: 0.65rem; color: var(--text-dim); letter-spacing: 1px; margin-top: 2px; }
+
+    .floating-alerts {
+      position: absolute;
+      right: -180px; top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .alert-pill {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(16px);
+      border-radius: 50px;
+      padding: 8px 18px;
+      font-size: 0.72rem;
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      opacity: 0;
+      transform: translateX(20px);
+      animation: alertAppear 3s ease-in-out infinite;
+    }
+    .alert-pill:nth-child(1) { animation-delay: 0s; border-color: rgba(0,255,136,0.3); color: #00ff88; }
+    .alert-pill:nth-child(2) { animation-delay: 1s; border-color: rgba(0,198,255,0.3); color: var(--blue1); }
+    .alert-pill:nth-child(3) { animation-delay: 2s; border-color: rgba(255,0,204,0.3); color: var(--purple1); }
+    @keyframes alertAppear {
+      0%,90%,100% { opacity: 0; transform: translateX(20px); }
+      15%,75% { opacity: 1; transform: translateX(0); }
+    }
+
+    /*.camera-info { }*/
+    .cam-features { display: flex; flex-direction: column; gap: 16px; margin-top: 36px; }
+    .cam-feat {
+      display: flex; gap: 16px; align-items: center;
+      padding: 16px 20px;
+      background: var(--glass);
+      border: 1px solid transparent;
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: all 0.5s ease;
+    }
+    .cam-feat.visible { opacity: 1; transform: translateX(0); }
+    .cam-feat:hover { border-color: rgba(0,198,255,0.2); }
+    .cam-feat-icon {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(0,198,255,0.15), rgba(0,114,255,0.15));
+      border: 1px solid rgba(0,198,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .cam-feat h4 { font-size: 0.92rem; font-weight: 600; margin-bottom: 2px; }
+    .cam-feat p { font-size: 0.8rem; color: var(--text-dim); }
+
+    /* ─── MODULARITY SECTION ─────────────── */
+    #modularity {
+      background: linear-gradient(180deg, #06091a 0%, #030a17 100%);
+    }
+    .mod-wrapper { text-align: center; }
+    .mod-blocks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: center;
+      margin: 60px 0;
+    }
+    .mod-block {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      min-width: 200px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      opacity: 0;
+      transform: translateY(30px) scale(0.9);
+      position: relative;
+      overflow: hidden;
+    }
+    .mod-block.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    .mod-block::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, transparent, rgba(0,198,255,0.05));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .mod-block:hover {
+      transform: translateY(-8px) scale(1.02);
+      border-color: rgba(0,198,255,0.4);
+      box-shadow: var(--glow-blue);
+    }
+    .mod-block:hover::before { opacity: 1; }
+    .mod-block.active {
+      border-color: rgba(0,198,255,0.6);
+      box-shadow: var(--glow-blue), inset 0 0 30px rgba(0,198,255,0.05);
+    }
+    .mod-icon { font-size: 2rem; margin-bottom: 12px; display: block; }
+    .mod-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 1.5px;
+      font-weight: 600;
+      color: var(--blue1);
+      margin-bottom: 6px;
+    }
+    .mod-desc { font-size: 0.8rem; color: var(--text-dim); }
+    .snap-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin: 20px 0;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .snap-arrow { color: var(--blue1); font-size: 1.2rem; animation: arrowPulse 1.5s ease-in-out infinite; }
+    @keyframes arrowPulse { 0%,100%{transform:translateX(0);opacity:0.5} 50%{transform:translateX(4px);opacity:1} }
+    .chain-visual {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      padding: 30px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(16px);
+      margin-top: 30px;
+      overflow-x: auto;
+    }
+    .chain-node {
+      background: linear-gradient(135deg, rgba(0,198,255,0.1), rgba(0,114,255,0.1));
+      border: 1px solid rgba(0,198,255,0.3);
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 1px;
+      color: var(--blue1);
+      white-space: nowrap;
+      transition: all 0.3s;
+    }
+    .chain-node:hover {
+      border-color: var(--blue1);
+      box-shadow: var(--glow-blue);
+    }
+    .chain-arrow {
+      width: 40px; height: 2px;
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      position: relative;
+      flex-shrink: 0;
+    }
+    .chain-arrow::after {
+      content: '';
+      position: absolute;
+      right: -4px; top: -4px;
+      width: 10px; height: 10px;
+      border-top: 2px solid var(--purple1);
+      border-right: 2px solid var(--purple1);
+      transform: rotate(45deg);
+    }
+    .chain-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--blue1);
+      box-shadow: 0 0 12px var(--blue1);
+      animation: moveDot 3s linear infinite;
+      position: absolute;
+      top: -3px;
+    }
+    .chain-arrow { position: relative; overflow: visible; }
+
+    /* ─── PERFORMANCE SECTION ─────────────── */
+    #performance {
+      background: linear-gradient(180deg, #030a17 0%, var(--navy) 100%);
+      overflow: hidden;
+    }
+    .perf-wrapper {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    #particle-canvas {
+      width: 100%;
+      height: 420px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(0,198,255,0.15);
+      box-shadow: var(--glow-blue);
+    }
+    .perf-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 40px; }
+    .stat-card {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      backdrop-filter: blur(16px);
+      transition: all 0.3s;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.5s ease;
+    }
+    .stat-card.visible { opacity: 1; transform: translateY(0); }
+    .stat-card:hover {
+      border-color: rgba(0,198,255,0.35);
+      box-shadow: var(--glow-blue);
+      transform: translateY(-4px);
+    }
+    .stat-val {
+      font-family: 'Orbitron', monospace;
+      font-size: 2.2rem;
+      font-weight: 900;
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .stat-label { font-size: 0.85rem; color: var(--text-dim); letter-spacing: 0.5px; }
+
+    /* ─── CTA / JOIN ─────────────────────── */
+    #cta {
+      background: linear-gradient(180deg, var(--navy) 0%, var(--navy2) 100%);
+      text-align: center;
+    }
+    .cta-inner {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 120px 40px;
+    }
+    .cta-glow {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, rgba(0,114,255,0.08) 0%, rgba(142,45,226,0.05) 50%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-inner .section-title { font-size: clamp(2rem, 4vw, 3.5rem); margin-bottom: 24px; }
+    .cta-inner .section-desc { margin: 0 auto 50px; text-align: center; }
+    .cta-buttons { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+
+    /* ─── FOOTER ─────────────────────────── */
+    footer {
+      background: var(--navy2);
+      border-top: 1px solid rgba(0,198,255,0.08);
+      padding: 40px 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .footer-logo {
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 1rem;
+      background: linear-gradient(90deg, var(--blue1), var(--purple1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .footer-copy { font-size: 0.8rem; color: var(--text-dim); }
+    .footer-links { display: flex; gap: 28px; }
+    .footer-links a {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .footer-links a:hover { color: var(--blue1); }
+
+    /* ─── GLASSMORPHISM CARD ─────────────── */
+    .glass-card {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(20px);
+      padding: 32px;
+      transition: all 0.3s;
+    }
+    .glass-card:hover {
+      border-color: rgba(0,198,255,0.35);
+      box-shadow: var(--glow-blue);
+    }
+
+    /* ─── FLOATING ANIM ─────────────────── */
+    @keyframes floatY {
+      0%,100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+    .float-anim { animation: floatY 4s ease-in-out infinite; }
+    .float-anim-2 { animation: floatY 5s ease-in-out infinite 1s; }
+    .float-anim-3 { animation: floatY 3.5s ease-in-out infinite 0.5s; }
+
+    /* ─── RESPONSIVE ─────────────────────── */
+    @media (max-width: 900px) {
+      .pipeline-wrapper, .camera-wrapper, .perf-wrapper { grid-template-columns: 1fr; }
+      .section-inner { padding: 80px 30px; }
+      nav { padding: 16px 30px; }
+      .nav-links { display: none; }
+      .floating-alerts { display: none; }
+    }
+  </style>
 </head>
 <body>
 
-  <!-- NAVBAR -->
-  <%- include("partials/navbar") %>
+<!-- Custom Cursor -->
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
 
+<!-- ─── NAVBAR ─── -->
+<nav id="navbar">
+  <div class="nav-logo">Modu<span>Vision</span></div>
+  <ul class="nav-links">
+    <li><a href="#pipeline">System</a></li>
+    <li><a href="#camera">Camera AI</a></li>
+    <li><a href="#modularity">Modules</a></li>
+    <li><a href="#performance">Performance</a></li>
+  </ul>
+  <a href="/auth" class="nav-cta">Start Building</a>
+</nav>
 
-  <!-- HERO SECTION -->
-  <section class="hero">
-    <video autoplay muted loop playsinline class="hero-video">
-      <source src="/materials/background.mp4" type="video/mp4">
-    </video>
+<!-- ─── HERO ─── -->
+<section id="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-glow-left"></div>
+  <div class="hero-glow-right"></div>
+  <div class="hero-content">
+    <div class="hero-badge">Smart Software · AI Vision Platform</div>
+    <h1 class="hero-title">Build Intelligent<br><span class="gradient-text">Vision Pipelines</span></h1>
+    <p class="hero-sub">Real-time AI processing for IP cameras. Compose modular vision models into powerful surveillance and analytics pipelines — no code, no limits.</p>
+    <div class="hero-buttons">
+      <a href="/auth" class="btn-primary">Start Building</a>
+    </div>
+  </div>
+  <div class="hero-scroll">
+    <span>Scroll</span>
+    <div class="scroll-line"></div>
+  </div>
+</section>
 
-    <div class="hero-overlay"></div>
-
-    <div class="hero-content">
-      <h1>Modular Intelligence for Retail Vision</h1>
-      <p>
-        ModuVision is a flexible AI vision platform that enables retail environments
-        to dynamically compose intelligent visual workflows.
-      </p>
-
-      <div class="hero-buttons">
-        <a href="/auth?mode=signup" class="navbar-btn">Get Started</a>
-        <a href="/auth?mode=login" class="navbar-btn outline">Login</a>
+<!-- ─── PIPELINE SECTION ─── -->
+<section id="pipeline">
+  <div class="section-inner">
+    <div class="pipeline-wrapper">
+      <div class="pipeline-visual">
+        <svg class="connector-svg" viewBox="0 0 480 480" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#00C6FF"/>
+              <stop offset="100%" stop-color="#FF00CC"/>
+            </linearGradient>
+          </defs>
+          <path class="conn-line" id="line1" d="M 160 90 Q 240 200 240 210"/>
+          <path class="conn-line" id="line2" d="M 320 90 Q 240 200 240 210"/>
+          <path class="conn-line" id="line3" d="M 240 270 Q 120 350 130 390"/>
+          <path class="conn-line" id="line4" d="M 240 270 Q 360 350 340 390"/>
+        </svg>
+        <div class="pipeline-nodes">
+          <div class="p-node n1 float-anim" id="pn1">
+            <div class="p-node-icon" style="background:linear-gradient(135deg,rgba(0,198,255,0.2),rgba(0,114,255,0.2));border:1px solid rgba(0,198,255,0.3)">🔍</div>
+            <div class="p-node-info"><h4>Object Detection</h4><p>YOLOv8 · Live inference</p></div>
+          </div>
+          <div class="p-node n2 float-anim-2" id="pn2">
+            <div class="p-node-icon" style="background:linear-gradient(135deg,rgba(255,0,204,0.2),rgba(142,45,226,0.2));border:1px solid rgba(255,0,204,0.3)">🧠</div>
+            <div class="p-node-info"><h4>NMN Router</h4><p>Dynamic Composition</p></div>
+          </div>
+          <div class="p-node n3 float-anim-3" id="pn3">
+            <div class="p-node-icon" style="background:linear-gradient(135deg,rgba(0,255,136,0.15),rgba(0,198,255,0.15));border:1px solid rgba(0,255,136,0.3)">🧱</div>
+            <div class="p-node-info"><h4>Shelf Gap Detection</h4><p>Retail aisle monitoring</p></div>
+          </div>
+          <div class="p-node n4 float-anim" id="pn4">
+            <div class="p-node-icon" style="background:linear-gradient(135deg,rgba(255,200,0,0.15),rgba(255,100,0,0.15));border:1px solid rgba(255,200,0,0.3)">👤</div>
+            <div class="p-node-info"><h4>Face Recognition</h4><p>Biometric · Real-time</p></div>
+          </div>
+          <div class="p-node n5 float-anim" id="pn5">
+            <div class="p-node-icon" style="background:linear-gradient(135deg,rgba(0,198,255,0.18),rgba(142,45,226,0.18));border:1px solid rgba(0,198,255,0.3)">🌡️</div>
+            <div class="p-node-info"><h4>Heatmap</h4><p>Footfall intensity mapping</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="pipeline-info">
+        <div class="section-tag">01 · System Architecture</div>
+        <h2 class="section-title">Pipeline Assembles<br><span class="gradient-text">As You Scroll</span></h2>
+        <p class="section-desc">Watch AI nodes connect dynamically, forming intelligent vision pipelines that process multiple data streams simultaneously.</p>
+        <div class="pipeline-steps">
+          <div class="step-item" id="step1">
+            <div class="step-num">01</div>
+            <div class="step-text"><h4>Ingest Camera Streams</h4><p>Connect any RTSP/ONVIF IP camera feed in seconds.</p></div>
+          </div>
+          <div class="step-item" id="step2">
+            <div class="step-num">02</div>
+            <div class="step-text"><h4>Route Through NMN</h4><p>Neural Module Networks dynamically select active models.</p></div>
+          </div>
+          <div class="step-item" id="step3">
+            <div class="step-num">03</div>
+            <div class="step-text"><h4>Real-Time Output</h4><p>Alerts, overlays, and analytics streamed instantly.</p></div>
+          </div>
+        </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-
-  <!-- ABOUT SECTION -->
-  <section class="about">
-    <h2>About ModuVision</h2>
-
-    <p class="about-intro">
-      ModuVision rethinks how computer vision systems are built. Instead of rigid,
-      single-purpose pipelines, we introduce a modular intelligence layer that adapts
-      to retail environments in real time.
-    </p>
-
-    <div class="about-modules">
-
-      <div class="module-card">
-        <h3>🔍 Detect</h3>
-        <p>
-          Independent vision modules identify products, shelves, customers,
-          and events with high precision.
-        </p>
+<!-- ─── CAMERA SECTION ─── -->
+<section id="camera">
+  <div class="section-inner">
+    <div class="camera-wrapper">
+      <div class="camera-info">
+        <div class="section-tag">02 · Live Camera AI</div>
+        <h2 class="section-title">See AI Process<br><span class="gradient-text">Every Frame</span></h2>
+        <p class="section-desc">ModuVision attaches directly to your IP cameras, running detection models frame-by-frame with zero latency overlays.</p>
+        <div class="cam-features">
+          <div class="cam-feat" id="cf1">
+            <div class="cam-feat-icon">📡</div>
+            <div><h4>RTSP / ONVIF Support</h4><p>Connect any professional IP camera instantly</p></div>
+          </div>
+          <div class="cam-feat" id="cf2">
+            <div class="cam-feat-icon">⚡</div>
+            <div><h4>Responsive Live Streaming</h4><p>Real-time overlays tuned for single-camera inference</p></div>
+          </div>
+          <div class="cam-feat" id="cf3">
+            <div class="cam-feat-icon">🎯</div>
+            <div><h4>Multi-Model Overlay</h4><p>Stack object, face, and behavior models simultaneously</p></div>
+          </div>
+          <div class="cam-feat" id="cf4">
+            <div class="cam-feat-icon">🔔</div>
+            <div><h4>Instant Alerts</h4><p>Webhook, email, and SMS notifications on events</p></div>
+          </div>
+        </div>
       </div>
-
-      <div class="module-card">
-        <h3>🧠 Analyze</h3>
-        <p>
-          Each module processes visual data separately, enabling specialized
-          reasoning without system-wide retraining.
-        </p>
+      <div style="position:relative">
+        <div class="camera-mockup float-anim">
+          <div class="camera-screen">
+            <div class="cam-grid"></div>
+            <div class="cam-scanline"></div>
+            <div class="cam-corner tl"></div>
+            <div class="cam-corner tr"></div>
+            <div class="cam-corner bl"></div>
+            <div class="cam-corner br"></div>
+            <div class="cam-live"><div class="live-dot"></div> LIVE · REC</div>
+            <div class="detection-box db1"><div class="db-label">PERSON 0.97</div></div>
+            <div class="detection-box db2"><div class="db-label">HEATMAP LIVE</div></div>
+            <div class="detection-box db3"><div class="db-label">FACE ID</div></div>
+          </div>
+          <div class="cam-stats">
+            <div class="cam-stat"><div class="cam-stat-val">90-180ms</div><div class="cam-stat-label">Latency</div></div>
+            <div class="cam-stat"><div class="cam-stat-val">8-18 FPS</div><div class="cam-stat-label">Frame Rate</div></div>
+            <div class="cam-stat"><div class="cam-stat-val">Single camera</div><div class="cam-stat-label">Current scope</div></div>
+          </div>
+        </div>
+        <div class="floating-alerts">
+          <div class="alert-pill">✓ Person Detected</div>
+          <div class="alert-pill">🌡️ Heatmap Updated</div>
+          <div class="alert-pill">👤 ID Matched</div>
+        </div>
       </div>
-
-      <div class="module-card">
-        <h3>🧩 Compose</h3>
-        <p>
-          Modules are dynamically assembled into task-specific pipelines using
-          a Neural Module Network architecture.
-        </p>
-      </div>
-
-      <div class="module-card">
-        <h3>⚡ Adapt</h3>
-        <p>
-          Retail systems evolve instantly — new tasks, new goals, no downtime,
-          and no full retraining cycles.
-        </p>
-      </div>
-
     </div>
-  </section>
+  </div>
+</section>
 
-
-  <!-- JOIN SECTION -->
-  <section class="join">
-    <h2>Join the Future of Intelligent Retail Vision</h2>
-    <p>Start building, experimenting, and deploying smarter systems today.</p>
-
-    <div class="join-buttons">
-      <a href="/auth?mode=signup" class="navbar-btn">Create Account</a>
-      <a href="/auth?mode=login" class="navbar-btn outline">Login</a>
+<!-- ─── MODULARITY SECTION ─── -->
+<section id="modularity">
+  <div class="section-inner">
+    <div class="mod-wrapper">
+      <div class="section-tag">03 · Modular Architecture</div>
+      <h2 class="section-title">Drag, Drop &<br><span class="gradient-text">Chain Any Model</span></h2>
+      <p class="section-desc" style="margin:0 auto">ModuVision's Neural Module Network lets you compose AI capabilities like building blocks — infinitely flexible, zero retraining.</p>
+      <div class="mod-blocks">
+        <div class="mod-block" id="mb1">
+          <span class="mod-icon">🔍</span>
+          <div class="mod-name">OBJECT DETECT</div>
+          <div class="mod-desc">YOLOv8 · Real-time</div>
+        </div>
+        <div class="mod-block" id="mb2">
+          <span class="mod-icon">🌡️</span>
+          <div class="mod-name">HEATMAP</div>
+          <div class="mod-desc">Footfall + dwell zones</div>
+        </div>
+        <div class="mod-block" id="mb3">
+          <span class="mod-icon">👤</span>
+          <div class="mod-name">FACE RECOG</div>
+          <div class="mod-desc">Biometric ID</div>
+        </div>
+        <div class="mod-block" id="mb4">
+          <span class="mod-icon">🚗</span>
+          <div class="mod-name">VEHICLE AI</div>
+          <div class="mod-desc">Plate + Make</div>
+        </div>
+        <div class="mod-block" id="mb5">
+          <span class="mod-icon">📊</span>
+          <div class="mod-name">ANALYTICS</div>
+          <div class="mod-desc">Heatmaps + Flow</div>
+        </div>
+        <div class="mod-block" id="mb6">
+          <span class="mod-icon">🧱</span>
+          <div class="mod-name">GAP DETECTION</div>
+          <div class="mod-desc">Shelf availability checks</div>
+        </div>
+      </div>
+      <div class="snap-indicator">
+        <span>Multi-model chaining</span>
+        <span class="snap-arrow">→</span>
+        <span>snap & connect</span>
+        <span class="snap-arrow">→</span>
+        <span>deploy instantly</span>
+      </div>
+      <div class="chain-visual">
+        <div class="chain-node">📡 Camera In</div>
+        <div class="chain-arrow"><div class="chain-dot"></div></div>
+        <div class="chain-node">🔍 Detect</div>
+        <div class="chain-arrow"></div>
+        <div class="chain-node">🧠 NMN Router</div>
+        <div class="chain-arrow"></div>
+        <div class="chain-node">👤 Identify</div>
+        <div class="chain-arrow"></div>
+        <div class="chain-node">🔔 Alert Out</div>
+      </div>
     </div>
-  </section>
+  </div>
+</section>
 
+<!-- ─── PERFORMANCE SECTION ─── -->
+<section id="performance">
+  <div class="section-inner">
+    <div class="perf-wrapper">
+      <div>
+        <canvas id="particle-canvas"></canvas>
+      </div>
+      <div>
+        <div class="section-tag">04 · Performance & Scale</div>
+        <h2 class="section-title">Built for<br><span class="gradient-text">Industrial Scale</span></h2>
+        <p class="section-desc">This build is optimized for practical single-camera analysis with modular AI blocks. Performance depends on the active model, camera quality, and whether heavy modules like tracking or attendance are enabled.</p>
+        <div class="perf-stats">
+          <div class="stat-card" id="sc1"><div class="stat-val">30-60 FPS</div><div class="stat-label">Typical Live Processing</div></div>
+          <div class="stat-card" id="sc2"><div class="stat-val"> +3 Camera</div><div class="stat-label">Per Python Runtime</div></div>
+          <div class="stat-card" id="sc3"><div class="stat-val">3-7 Models</div><div class="stat-label">Available AI Modules</div></div>
+          <div class="stat-card" id="sc4"><div class="stat-val">90-180ms</div><div class="stat-label">Observed Response Window</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CTA SECTION ─── -->
+<section id="cta">
+  <div class="cta-glow"></div>
+  <div class="cta-inner">
+    <div class="section-tag">Ready to Deploy</div>
+    <h2 class="section-title">Join the Future of<br><span class="gradient-text">Intelligent Vision</span></h2>
+    <p class="section-desc">Start building, experimenting, and deploying smarter AI surveillance systems today. No GPU expertise required.</p>
+    <div class="cta-buttons">
+      <a href="/auth" class="btn-primary">Start Building</a>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+  <div class="footer-logo">ModuVision</div>
+  <div class="footer-copy">© 2025 ModuVision Smart Software. All rights reserved.</div>
+  <div class="footer-links">
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+    <a href="#">Docs</a>
+    <a href="#">Contact</a>
+  </div>
+</footer>
+
+<script>
+/* ─── CURSOR ─── */
+const cursor = document.getElementById('cursor');
+const ring = document.getElementById('cursorRing');
+let mx = 0, my = 0, rx = 0, ry = 0;
+document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+function animCursor() {
+  cursor.style.transform = `translate(${mx-6}px, ${my-6}px)`;
+  rx += (mx - rx) * 0.12;
+  ry += (my - ry) * 0.12;
+  ring.style.transform = `translate(${rx-20}px, ${ry-20}px)`;
+  requestAnimationFrame(animCursor);
+}
+animCursor();
+document.querySelectorAll('a, button, .mod-block').forEach(el => {
+  el.addEventListener('mouseenter', () => ring.style.transform += ' scale(1.8)');
+  el.addEventListener('mouseleave', () => {});
+});
+
+/* ─── NAVBAR SCROLL ─── */
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('scrolled', window.scrollY > 60);
+});
+
+/* ─── HERO THREE.JS ─── */
+(function() {
+  const canvas = document.getElementById('hero-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 8;
+
+  // Floating boxes (pipeline nodes)
+  const geoms = [
+    new THREE.BoxGeometry(0.7, 0.7, 0.7),
+    new THREE.BoxGeometry(0.5, 0.5, 0.5),
+    new THREE.BoxGeometry(0.9, 0.4, 0.4),
+  ];
+  const neonMat1 = new THREE.MeshBasicMaterial({ color: 0x00C6FF, wireframe: true, opacity: 0.5, transparent: true });
+  const neonMat2 = new THREE.MeshBasicMaterial({ color: 0xFF00CC, wireframe: true, opacity: 0.4, transparent: true });
+  const neonMat3 = new THREE.MeshBasicMaterial({ color: 0x8E2DE2, wireframe: true, opacity: 0.35, transparent: true });
+  const mats = [neonMat1, neonMat2, neonMat3];
+
+  const boxes = [];
+  for (let i = 0; i < 22; i++) {
+    const g = geoms[i % geoms.length];
+    const m = mats[i % mats.length];
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.set((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 6);
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    mesh.userData = { vy: (Math.random() - 0.5) * 0.003, vr: (Math.random() - 0.5) * 0.005, vry: (Math.random() - 0.5) * 0.008 };
+    scene.add(mesh);
+    boxes.push(mesh);
+  }
+
+  // Particles
+  const ptGeo = new THREE.BufferGeometry();
+  const ptCount = 300;
+  const ptPos = new Float32Array(ptCount * 3);
+  for (let i = 0; i < ptCount * 3; i++) ptPos[i] = (Math.random() - 0.5) * 30;
+  ptGeo.setAttribute('position', new THREE.BufferAttribute(ptPos, 3));
+  const ptMat = new THREE.PointsMaterial({ color: 0x00C6FF, size: 0.05, transparent: true, opacity: 0.5 });
+  scene.add(new THREE.Points(ptGeo, ptMat));
+
+  // Lines between boxes
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x0072FF, transparent: true, opacity: 0.15 });
+  for (let i = 0; i < 12; i++) {
+    const a = boxes[Math.floor(Math.random() * boxes.length)];
+    const b = boxes[Math.floor(Math.random() * boxes.length)];
+    const lg = new THREE.BufferGeometry().setFromPoints([a.position, b.position]);
+    scene.add(new THREE.Line(lg, lineMat));
+  }
+
+  let mouseX = 0, mouseY = 0;
+  document.addEventListener('mousemove', e => {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  let t = 0;
+  (function animate() {
+    requestAnimationFrame(animate);
+    t += 0.01;
+    camera.position.x += (mouseX * 1.5 - camera.position.x) * 0.02;
+    camera.position.y += (-mouseY * 1.0 - camera.position.y) * 0.02;
+    camera.lookAt(scene.position);
+    boxes.forEach(b => {
+      b.position.y += Math.sin(t + b.position.x) * 0.002;
+      b.rotation.x += b.userData.vr;
+      b.rotation.y += b.userData.vry;
+    });
+    renderer.render(scene, camera);
+  })();
+})();
+
+/* ─── PARTICLE CANVAS ─── */
+(function() {
+  const canvas = document.getElementById('particle-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  function resize() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const particles = Array.from({ length: 120 }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: (Math.random() - 0.5) * 2.5,
+    vy: (Math.random() - 0.5) * 0.6,
+    size: Math.random() * 2.5 + 0.5,
+    hue: Math.random() > 0.5 ? '#00C6FF' : '#FF00CC',
+    opacity: Math.random() * 0.7 + 0.3,
+    trail: []
+  }));
+
+  function drawFrame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(2,8,23,0.92)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(0,198,255,0.05)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < canvas.width; x += 30) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 30) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+
+    particles.forEach(p => {
+      p.trail.push({ x: p.x, y: p.y });
+      if (p.trail.length > 18) p.trail.shift();
+
+      // Trail
+      for (let i = 1; i < p.trail.length; i++) {
+        const alpha = (i / p.trail.length) * p.opacity * 0.5;
+        ctx.strokeStyle = p.hue.replace(')', `,${alpha})`).replace('rgb', 'rgba').replace('#', 'rgba(').replace('00C6FF', '0,198,255').replace('FF00CC', '255,0,204');
+        ctx.lineWidth = (i / p.trail.length) * p.size;
+        ctx.beginPath();
+        ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y);
+        ctx.lineTo(p.trail[i].x, p.trail[i].y);
+        ctx.stroke();
+      }
+
+      // Dot
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = p.hue === '#00C6FF'
+        ? `rgba(0,198,255,${p.opacity})`
+        : `rgba(255,0,204,${p.opacity})`;
+      ctx.shadowColor = p.hue;
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+    });
+
+    // Connections
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 80) {
+          ctx.strokeStyle = `rgba(0,198,255,${(1 - dist/80) * 0.15})`;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(drawFrame);
+  }
+  drawFrame();
+})();
+
+/* ─── SCROLL ANIMATIONS ─── */
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) e.target.classList.add('visible');
+  });
+}, { threshold: 0.15 });
+
+// Pipeline nodes & steps
+['pn1','pn2','pn3','pn4','pn5'].forEach((id, i) => {
+  const el = document.getElementById(id);
+  if (el) {
+    setTimeout(() => observer.observe(el), i * 100);
+  }
+});
+['step1','step2','step3'].forEach((id, i) => {
+  const el = document.getElementById(id);
+  if (el) observer.observe(el);
+});
+
+// Connection lines
+const lineObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      setTimeout(() => document.getElementById('line1')?.classList.add('visible'), 400);
+      setTimeout(() => document.getElementById('line2')?.classList.add('visible'), 600);
+      setTimeout(() => document.getElementById('line3')?.classList.add('visible'), 900);
+      setTimeout(() => document.getElementById('line4')?.classList.add('visible'), 1100);
+    }
+  });
+}, { threshold: 0.2 });
+const pipelineSection = document.getElementById('pipeline');
+if (pipelineSection) lineObserver.observe(pipelineSection);
+
+// Camera features
+['cf1','cf2','cf3','cf4'].forEach((id, i) => {
+  const el = document.getElementById(id);
+  if (el) {
+    const ob = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          setTimeout(() => e.target.classList.add('visible'), i * 120);
+        }
+      });
+    }, { threshold: 0.1 });
+    ob.observe(el);
+  }
+});
+
+// Mod blocks
+['mb1','mb2','mb3','mb4','mb5','mb6'].forEach((id, i) => {
+  const el = document.getElementById(id);
+  if (el) {
+    const ob = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) setTimeout(() => e.target.classList.add('visible'), i * 100);
+      });
+    }, { threshold: 0.1 });
+    ob.observe(el);
+  }
+});
+
+// Stat cards
+['sc1','sc2','sc3','sc4'].forEach((id, i) => {
+  const el = document.getElementById(id);
+  if (el) {
+    const ob = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) setTimeout(() => e.target.classList.add('visible'), i * 120);
+      });
+    }, { threshold: 0.1 });
+    ob.observe(el);
+  }
+});
+
+/* ─── MOD BLOCK INTERACTION ─── */
+document.querySelectorAll('.mod-block').forEach(b => {
+  b.addEventListener('click', () => {
+    b.classList.toggle('active');
+  });
+});
+
+/* ─── CHAIN DOT ANIM ─── */
+(function() {
+  const arrows = document.querySelectorAll('.chain-arrow');
+  arrows.forEach(a => {
+    const dot = document.createElement('div');
+    dot.className = 'chain-dot';
+    a.appendChild(dot);
+    let pos = 0;
+    function move() {
+      pos += 0.4;
+      if (pos > a.offsetWidth) pos = 0;
+      dot.style.left = pos + 'px';
+      requestAnimationFrame(move);
+    }
+    move();
+  });
+})();
+</script>
 </body>
 </html>
