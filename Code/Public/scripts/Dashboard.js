@@ -2,12 +2,103 @@ let cameras = [];
 const cameraPipelines = {};
 let currentCameraId = null;
 
+const cameraSelect = document.getElementById("cameraSelect");
+const cameraDropdownToggle = document.getElementById("cameraDropdownToggle");
+const cameraDropdownLabel = document.getElementById("cameraDropdownLabel");
+const cameraDropdownMenu = document.getElementById("cameraDropdownMenu");
+const liveFeedImage = document.getElementById("live-feed");
+const liveFeedPlaceholder = document.getElementById("liveFeedPlaceholder");
+const liveFeedSubtext = document.getElementById("liveFeedSubtext");
+
+function setCameraDropdownLabel(label = "Select Camera") {
+  cameraDropdownLabel.textContent = label;
+}
+
+function closeCameraDropdown() {
+  cameraDropdownMenu.classList.remove("show");
+  cameraDropdownToggle.setAttribute("aria-expanded", "false");
+}
+
+function openCameraDropdown() {
+  cameraDropdownMenu.classList.add("show");
+  cameraDropdownToggle.setAttribute("aria-expanded", "true");
+}
+
+function renderCameraDropdown() {
+  cameraSelect.innerHTML = '<option value="">Select Camera</option>';
+  cameraDropdownMenu.innerHTML = "";
+
+  if (cameras.length === 0) {
+    const emptyState = document.createElement("div");
+    emptyState.className = "camera-dropdown-empty";
+    emptyState.textContent = "No cameras added yet";
+    cameraDropdownMenu.appendChild(emptyState);
+    return;
+  }
+
+  cameras.forEach(camera => {
+    const option = document.createElement("option");
+    option.value = camera.url;
+    option.dataset.cameraId = camera.name;
+    option.textContent = camera.name;
+    cameraSelect.appendChild(option);
+
+    const item = document.createElement("div");
+    item.className = "camera-dropdown-item";
+
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "camera-dropdown-select";
+    selectButton.textContent = camera.name;
+    selectButton.addEventListener("click", () => {
+      cameraSelect.value = camera.url;
+      setCameraDropdownLabel(camera.name);
+      closeCameraDropdown();
+      cameraSelect.dispatchEvent(new Event("change"));
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "delete-btn camera-delete-btn";
+    deleteButton.innerHTML = "&times;";
+    deleteButton.title = `Delete ${camera.name}`;
+    deleteButton.setAttribute("aria-label", `Delete ${camera.name}`);
+    deleteButton.addEventListener("click", event => {
+      event.stopPropagation();
+      promptDeleteCamera(camera.name);
+    });
+
+    item.appendChild(selectButton);
+    item.appendChild(deleteButton);
+    cameraDropdownMenu.appendChild(item);
+  });
+}
+
 function openAddCamera() {
-  document.getElementById("cameraModal").style.display = "block";
+  modal.classList.add("show");
 }
+
 function closeAddCamera() {
-  document.getElementById("cameraModal").style.display = "none";
+  modal.classList.remove("show");
+  document.getElementById("cameraName").value = "";
+  document.getElementById("cameraUrl").value = "";
 }
+
+function showLiveFeedPlaceholder(title, message) {
+  liveFeedPlaceholder.querySelector(".live-feed-placeholder-title").textContent = title;
+  liveFeedPlaceholder.querySelector(".live-feed-placeholder-text").textContent = message;
+  liveFeedPlaceholder.classList.add("show");
+  liveFeedImage.classList.remove("is-active");
+  liveFeedImage.removeAttribute("src");
+  liveFeedSubtext.textContent = message;
+}
+
+function showLiveFeedStream(cameraName) {
+  liveFeedPlaceholder.classList.remove("show");
+  liveFeedImage.classList.add("is-active");
+  liveFeedSubtext.textContent = `${cameraName} is streaming`;
+}
+
 async function addCamera() {
   const name = document.getElementById("cameraName").value.trim();
   const url = document.getElementById("cameraUrl").value.trim();
@@ -29,22 +120,28 @@ async function addCamera() {
   }
 
   try {
-    await fetch('/user/addCamera', {
+    const response = await fetch('/user/addCamera', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ name, url })
     });
 
-    const select = document.getElementById("cameraSelect");
-    const option = document.createElement("option");
-    option.value = url;
-    option.dataset.cameraId = name;
-    option.textContent = name;
-    select.appendChild(option);
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      openInfoModal("Add Camera Failed", `<p style='color: #ff6b6b;'>${data.message || "Failed to add camera."}</p>`);
+      return;
+    }
+
+    cameras = cameras.filter(camera => camera.name !== name);
+    cameras.push({ name, url });
+    renderCameraDropdown();
+    cameraSelect.value = url;
+    setCameraDropdownLabel(name);
 
     closeAddCamera();
     openInfoModal("Success", `<p>Camera "<b>${name}</b>" added successfully.</p>`);
+    cameraSelect.dispatchEvent(new Event("change"));
 
   } catch (err) {
     console.error(err);
@@ -82,13 +179,12 @@ async function applyCameraSelection(cameraId, url) {
 
 function ensureCameraSelected() {
   if (currentCameraId) return true;
-  const select = document.getElementById('cameraSelect');
-  if (select && select.value) return true;
+  if (cameraSelect && cameraSelect.value) return true;
   openInfoModal("Camera Required", "<p style='color: #ffbd2e;'>Please select a camera before adding models or uploading the pipeline.</p>");
   return false;
 }
 
-document.getElementById("cameraSelect").addEventListener("change", async function () {
+cameraSelect.addEventListener("change", async function () {
   const url = this.value;
   if (!url) return;
   const cameraId = this.selectedOptions[0].dataset.cameraId || url;
@@ -101,11 +197,15 @@ document.getElementById("cameraSelect").addEventListener("change", async functio
 });
 
 function startCamera() {
-  const img = document.getElementById("live-feed");
+  if (!currentCameraId) {
+    showLiveFeedPlaceholder("Camera idle", "Select a camera to start streaming");
+    return;
+  }
+
   const suffix = currentCameraId ? `camera_id=${encodeURIComponent(currentCameraId)}&` : "";
-  img.src = `http://127.0.0.1:5000/video?${suffix}t=${new Date().getTime()}`;
+  showLiveFeedStream(currentCameraId);
+  liveFeedImage.src = `http://127.0.0.1:5000/video?${suffix}t=${Date.now()}`;
 }
-window.onload = startCamera;
 
 async function activateParkingMode() {
   await fetch("http://127.0.0.1:5000/init_parking", {
@@ -565,6 +665,72 @@ function loadProject(projectId) {
     .catch(err => console.error(err));
 }
 
+function promptDeleteCamera(cameraName) {
+  openInfoModal('Confirm Delete', `<p>Are you sure you want to delete camera "<b>${cameraName}</b>"? This cannot be undone.</p>`);
+  const okBtn = document.querySelector('#infoModal .btn-primary');
+  okBtn.innerText = "Delete";
+  okBtn.style.backgroundColor = "#ff4d4d";
+  okBtn.setAttribute("type", "button");
+  okBtn.removeAttribute("onclick");
+  okBtn.onclick = event => {
+    event.preventDefault();
+    event.stopPropagation();
+    executeCameraDelete(cameraName);
+  };
+}
+
+async function executeCameraDelete(cameraName) {
+  try {
+    const response = await fetch(new URL('/user/deleteCamera', window.location.origin), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name: cameraName })
+    });
+
+    const responseText = await response.text();
+    let data;
+
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (parseError) {
+      throw new Error(`Unexpected server response (${response.status}): ${responseText.slice(0, 120)}`);
+    }
+
+    const okBtn = document.querySelector('#infoModal .btn-primary');
+    okBtn.innerText = "OK";
+    okBtn.style.backgroundColor = "";
+    okBtn.setAttribute("type", "button");
+    okBtn.onclick = event => {
+      event.preventDefault();
+      closeInfoModal();
+    };
+
+    if (!response.ok || !data.success) {
+      openInfoModal('Delete Failed', `<p style='color: #ff6b6b;'>${data.message || 'Failed to delete camera.'}</p>`);
+      return;
+    }
+
+    cameras = cameras.filter(camera => camera.name !== cameraName);
+    delete cameraPipelines[cameraName];
+
+    if (currentCameraId === cameraName) {
+      currentCameraId = null;
+      cameraSelect.value = "";
+      setCameraDropdownLabel();
+      clearCanvasBlocks();
+      showLiveFeedPlaceholder("Camera removed", "Select another camera to continue streaming");
+    }
+
+    renderCameraDropdown();
+    closeCameraDropdown();
+    openInfoModal('Camera Deleted', `<p>Camera "<b>${cameraName}</b>" was deleted successfully.</p>`);
+  } catch (err) {
+    console.error(err);
+    openInfoModal('Delete Failed', `<p style="color: #ff6b6b;">${err.message || 'Unable to delete camera. Please try again.'}</p>`);
+  }
+}
+
 function deleteSelectedProject() {
     const select = document.getElementById('projectSelect');
     if (!select) return;
@@ -741,6 +907,7 @@ function uploadAttendanceImages() {
 
 
 document.addEventListener('DOMContentLoaded', () => {
+  showLiveFeedPlaceholder("Camera idle", "Select a camera to start streaming");
   loadProjects();
   const dropdown = document.getElementById('projectSelect');
   const deleteBtn = document.getElementById('deleteProjectBtn');
@@ -753,13 +920,16 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch('/user/getCameras')
     .then(res => res.json())
     .then(data => {
-      const select = document.getElementById("cameraSelect");
-      for (let name in data.cameras) {
-        const option = document.createElement("option");
-        option.value = data.cameras[name];
-        option.textContent = name;
-        select.appendChild(option);
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to fetch cameras');
       }
+      cameras = Object.entries(data.cameras || {}).map(([name, url]) => ({ name, url }));
+      renderCameraDropdown();
+    })
+    .catch(err => {
+      console.error(err);
+      cameras = [];
+      renderCameraDropdown();
     });
 
   fetch('/user/Getprojects')
@@ -791,22 +961,37 @@ document.addEventListener('DOMContentLoaded', () => {
     loadProject(projectId);
     localStorage.setItem('activeProjectId', projectId);
   });
+
+  cameraDropdownToggle.addEventListener('click', event => {
+    event.stopPropagation();
+    const isOpen = cameraDropdownMenu.classList.contains('show');
+    if (isOpen) {
+      closeCameraDropdown();
+      return;
+    }
+    openCameraDropdown();
+  });
 });
 
 
 const modal = document.getElementById('cameraModal');
-function openAddCamera() {
-    modal.classList.add('show');
-}
-function closeAddCamera() {
-    modal.classList.remove('show');
-    
-    document.getElementById('cameraName').value = '';
-    document.getElementById('cameraUrl').value = '';
-}
-window.onclick = function(event) {
+liveFeedImage.addEventListener("error", () => {
+    showLiveFeedPlaceholder("Stream unavailable", "The selected camera could not be loaded. Check the backend server or camera URL.");
+});
+
+liveFeedImage.addEventListener("load", () => {
+    if (currentCameraId) {
+        showLiveFeedStream(currentCameraId);
+    }
+});
+
+window.addEventListener('click', function(event) {
     if (event.target === modal) {
         closeAddCamera();
     }
-}
+
+    if (!event.target.closest('.camera-dropdown-wrapper')) {
+        closeCameraDropdown();
+    }
+});
 

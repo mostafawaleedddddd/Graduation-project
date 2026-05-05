@@ -23,7 +23,7 @@
             <div class="navbar-logo">
                 <img src="/materials/logo.png" alt="ModuVision Logo" draggable="false">
             </div>
-            <button id="logoutBtn" class="logout-btn">Logout</button>
+            <button type="button" id="logoutBtn" class="logout-btn">Logout</button>
         </div>
     </div>
 
@@ -36,7 +36,7 @@
                 <select id="projectSelect" class="live-feed-select">
                     <option value="">Select Project</option>
                 </select>
-                <button id="deleteProjectBtn" class="delete-btn" onclick="deleteSelectedProject()">🗑️</button>
+                <button type="button" id="deleteProjectBtn" class="delete-btn" onclick="deleteSelectedProject()">🗑️</button>
             </div>
 
             <div class="functionality" draggable="true" data-type="Object Detection">
@@ -68,11 +68,11 @@
         <!-- Info Modal -->
         <div id="infoModal" class="modal-overlay">
             <div class="modal-content window-panel">
-                <button class="close-btn window-close" onclick="closeInfoModal()">&times;</button>
+                <button type="button" class="close-btn window-close" onclick="closeInfoModal()">&times;</button>
                 <h3 id="infoModalTitle">Notification</h3>
                 <div id="infoModalContent" class="modal-scroll-area"></div>
                 <div class="action-buttons window-actions">
-                    <button class="btn-primary" onclick="closeInfoModal()">OK</button>
+                    <button type="button" class="btn-primary" onclick="closeInfoModal()">OK</button>
                 </div>
             </div>
         </div>
@@ -94,36 +94,49 @@
         <!-- Live Feed Panel -->
         <div class="live-feed-panel">
             <div class="live-feed-title">
-                <div style="display:flex;align-items:center;gap:8px;">
+                <div class="live-feed-status">
                     <div class="live-feed-dot"></div>
-                    Live Feed
+                    <div class="live-feed-heading">
+                        <span class="live-feed-kicker">Live Feed</span>
+                        <span id="liveFeedSubtext" class="live-feed-subtext">Select a camera to start streaming</span>
+                    </div>
                 </div>
                 <div class="live-feed-buttons">
-                    <select id="cameraSelect" class="live-feed-select">
-                        <option value="">Select Camera</option>
-                    </select>
-                    <button class="live-feed-btn" onclick="openAddCamera()">➕ Add</button>
-                    <button class="live-feed-btn" onclick="saveProject()">💾 Save</button>
-                    <button class="live-feed-btn" onclick="uploadProject()">📤 Upload</button>
+                    <div class="camera-dropdown-wrapper">
+                        <button type="button" id="cameraDropdownToggle" class="live-feed-select camera-dropdown-toggle">
+                            <span id="cameraDropdownLabel">Select Camera</span>
+                            <span class="camera-dropdown-caret">▼</span>
+                        </button>
+                        <div id="cameraDropdownMenu" class="camera-dropdown-menu"></div>
+                        <select id="cameraSelect" class="camera-select-native" aria-hidden="true" tabindex="-1">
+                            <option value="">Select Camera</option>
+                        </select>
+                    </div>
+                    <button type="button" class="live-feed-btn" onclick="openAddCamera()">➕ Add</button>
+                    <button type="button" class="live-feed-btn" onclick="saveProject()">💾 Save</button>
+                    <button type="button" class="live-feed-btn" onclick="uploadProject()">📤 Upload</button>
                 </div>
             </div>
             <div class="live-feed-content">
-                <img id="live-feed" src="http://127.0.0.1:5000/video" alt="Live Camera Feed"
-                    style="width:100%;height:auto;border-radius:8px;">
+                <div id="liveFeedPlaceholder" class="live-feed-placeholder">
+                    <span class="live-feed-placeholder-title">Camera idle</span>
+                    <span class="live-feed-placeholder-text">Choose a saved camera or add a new one to begin the stream.</span>
+                </div>
+                <img id="live-feed" alt="Live Camera Feed">
             </div>
         </div>
 
         <!-- Save Project Modal -->
         <div id="saveProjectModal" class="modal-overlay">
             <div class="modal-content window-panel">
-                <button class="close-btn window-close" onclick="closeSaveModal()">&times;</button>
+                <button type="button" class="close-btn window-close" onclick="closeSaveModal()">&times;</button>
                 <h3>Save Project</h3>
                 <div class="input-group">
                     <input type="text" id="projectNameInput" placeholder="Enter project name..." autocomplete="off">
                 </div>
                 <div class="action-buttons window-actions">
-                    <button class="btn-secondary" onclick="closeSaveModal()">Cancel</button>
-                    <button class="btn-primary" onclick="confirmSaveProject()">Save</button>
+                    <button type="button" class="btn-secondary" onclick="closeSaveModal()">Cancel</button>
+                    <button type="button" class="btn-primary" onclick="confirmSaveProject()">Save</button>
                 </div>
             </div>
         </div>
@@ -133,7 +146,7 @@
     <!-- Add Camera Modal -->
     <div id="cameraModal" class="modal-overlay">
         <div class="modal-content">
-            <button class="close-btn" onclick="closeAddCamera()">&times;</button>
+            <button type="button" class="close-btn" onclick="closeAddCamera()">&times;</button>
             <h3>Add IP Camera</h3>
             <div class="input-group">
                 <input type="text" id="cameraName" placeholder="Camera Name">
@@ -142,8 +155,8 @@
                 <input type="text" id="cameraUrl" placeholder="RTSP / HTTP URL">
             </div>
             <div class="action-buttons">
-                <button class="btn-secondary" onclick="closeAddCamera()">Cancel</button>
-                <button class="btn-primary" onclick="addCamera()">Add Camera</button>
+                <button type="button" class="btn-secondary" onclick="closeAddCamera()">Cancel</button>
+                <button type="button" class="btn-primary" onclick="addCamera()">Add Camera</button>
             </div>
         </div>
     </div>

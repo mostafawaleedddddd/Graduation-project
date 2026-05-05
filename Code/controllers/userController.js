@@ -99,6 +99,7 @@ async function addCamera(req, res) {
     user.cameras.set(name, url);
 
     await user.save();
+    req.session.user = user;
 
     res.json({ success: true, message: "Camera added successfully" });
 
@@ -156,11 +157,41 @@ async function getCameraByName(req, res) {
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
+async function deleteCamera(req, res) {
+  try {
+    const name = req.params.name || req.body.name;
+    const userId = req.session.user._id;
+
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Camera name is required" });
+    }
+
+    const user = await users.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (!user.cameras.has(name)) {
+      return res.status(404).json({ success: false, message: "Camera not found" });
+    }
+
+    user.cameras.delete(name);
+    await user.save();
+    req.session.user = user;
+
+    res.json({ success: true, message: "Camera deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
 module.exports = {
   login,
   checkCredentials,
   addUser,
   addCamera,
   getCameras,
-  getCameraByName
+  getCameraByName,
+  deleteCamera
 };
