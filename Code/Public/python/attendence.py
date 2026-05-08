@@ -12,10 +12,13 @@ class AttendanceSystem:
         self.dataset_path = dataset_path
         self.threshold = threshold
 
-        # ================= LOAD MODEL =================
-        print("🔄 Loading InsightFace...")
-        self.app = FaceAnalysis(name="buffalo_l")
+        # ================= LOAD MODEL ON GPU =================
+        print("🔄 Loading InsightFace on GPU...")
+        # providers=['CUDAExecutionProvider'] forces the math to your RTX 3050
+        self.app = FaceAnalysis(name="buffalo_l", providers=['CUDAExecutionProvider'])
+        # ctx_id=0 specifies the first NVIDIA GPU found
         self.app.prepare(ctx_id=0, det_size=(320, 320))
+        print("✅ InsightFace running on GPU (ID: 0)")
 
         # ================= STORAGE =================
         self.person_embeddings = defaultdict(list)
@@ -25,16 +28,18 @@ class AttendanceSystem:
         self.marked_names = set()
         self.attendance_log = []
 
+        # Ensure the image folder exists to prevent errors
+        if not os.path.exists(self.dataset_path):
+            os.makedirs(self.dataset_path)
+
         # ================= BUILD DATABASE =================
         self._build_database()
 
     # ================= BUILD DATABASE =================
     def _build_database(self):
-
         print("📥 Building face database...")
 
         for file in os.listdir(self.dataset_path):
-
             img_path = os.path.join(self.dataset_path, file)
 
             # Skip non-image files
@@ -45,6 +50,7 @@ class AttendanceSystem:
             if img is None:
                 continue
 
+            # Model processing happens on GPU
             faces = self.app.get(img)
             if len(faces) == 0:
                 print(f"⚠️ No face found in {file}")
@@ -53,20 +59,20 @@ class AttendanceSystem:
             emb = faces[0].embedding
             emb = emb / np.linalg.norm(emb)
 
-        # 🔥 Use filename as person name
+            # Use filename as person name
             person_name = os.path.splitext(file)[0]
-
             self.person_embeddings[person_name].append(emb)
 
+        self._update_centroids()
         print("✅ Persons loaded:", len(self.person_embeddings))
 
-    # ================= BUILD CENTROIDS =================
+    def _update_centroids(self):
+        """Calculates the average embedding (centroid) for each person."""
         for person, embs in self.person_embeddings.items():
             self.centroids[person] = np.mean(embs, axis=0)
+        print("✅ Centroids updated")
 
-    print("✅ Centroids created")
-
-    # ================= ATTENDANCE =================
+    # ================= ATTENDANCE LOGGING =================
     def _mark_attendance(self, name):
         now = datetime.now().strftime("%H:%M:%S")
         if name not in self.marked_names:
@@ -77,10 +83,8 @@ class AttendanceSystem:
             })
             print(f"Attendance Marked: {name}")
 
-
-
     def add_image(self, filepath, name):
-
+        """Adds a new face to the system and immediately updates the GPU-ready centroids."""
         img = cv2.imread(filepath)
         if img is None:
             print("❌ Failed to load image")
@@ -92,17 +96,20 @@ class AttendanceSystem:
             print("❌ No face found in image")
             return
 
+        # Fixed: Using your self.person_embeddings logic instead of non-existent classNames
         embedding = faces[0].embedding
-        self.known_embeddings.append(embedding)
-        self.classNames.append(name)
+        embedding = embedding / np.linalg.norm(embedding)
+        
+        self.person_embeddings[name].append(embedding)
+        self._update_centroids() # Re-calculate average face for this person
         print(f"✅ Added new face: {name}")
+
     # ================= PROCESS FRAME =================
     def process(self, frame):
-
+        # Face detection and feature extraction happens on GPU
         faces = self.app.get(frame)
 
         for face in faces:
-
             x1, y1, x2, y2 = map(int, face.bbox)
             emb = face.embedding
             emb = emb / np.linalg.norm(emb)
@@ -112,6 +119,7 @@ class AttendanceSystem:
             best_score = -1
 
             for person, centroid in self.centroids.items():
+                # Dot product for cosine similarity
                 score = np.dot(emb, centroid)
 
                 if score > best_score:
@@ -127,7 +135,8 @@ class AttendanceSystem:
                 name = "UNKNOWN"
                 color = (0, 0, 255)
 
-            # ================= DRAW =================
+            # ================= DRAWING (CPU) =================
+            # Drawing cannot be offloaded to GPU, but with GPU math it is much faster
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(
                 frame,

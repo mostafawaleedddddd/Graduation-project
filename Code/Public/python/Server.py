@@ -1,13 +1,13 @@
-from importlib.resources import files
 import os
-
 import cv2
+import time
+import threading
+from queue import Queue, Empty
 from flask import Flask, Response, request, jsonify
 from flask_cors import CORS
-import threading
-import time
 from ultralytics import YOLO
 
+# --- YOUR ORIGINAL IMPORTS ---
 from color_detection_pi import apply_color_detection
 from human_tracking import HumanTracker
 from object_countingtry import ObjectCounterBlock
@@ -18,187 +18,169 @@ from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
 
-
 class LiveStreamServer:
 
     def __init__(self):
-
         self.app = Flask(__name__)
         CORS(self.app)
+
+        # ================= 1. GPU MODEL INITIALIZATION =================
+        print("🚀 Initializing GPU Models for ModuVision...")
+        
+        # Main YOLO model moved to GPU
         self.model = YOLO("yolov8s.pt")
+        self.model.to('cuda') 
+        
+        # Initialize blocks (Ensure their internal models also use .to('cuda') if needed)
         self.human_tracker = HumanTracker()
         self.object_counter = ObjectCounterBlock()
         self.dual_counter = DualModelObjectCounter()
         self.gap_detector = ShelfGapDetector()
-        self.attendance = AttendanceSystem()
+        self.attendance = AttendanceSystem() # Attendance handles its own GPU via InsightFace ctx_id=0
         self.parking_model = ParkingManagementBlock()
         self.heatmap = HeatmapBlock()
         self.shelf_orchestrator = ShelfOrchestrator()
+
+        # ================= 2. QUEUE SYSTEM (For Speed) =================
+        # This replaces the old 'self.lock' system to allow parallel processing
+        self.input_queue = Queue(maxsize=1)   # Fresh frames from camera
+        self.output_queue = Queue(maxsize=1)  # Processed frames for web
+
+        # ================= 3. STATE MANAGEMENT =================
         self.pipeline = []
         self.camera_pipelines = {"default": []}
         self.camera_source = 1
         self.camera_sources = {"default": self.camera_source}
         self.current_camera_id = "default"
-        self.cap = None
-        self.raw_frame = None
-        self.processed_frame = None
-        self.lock = threading.Lock()
         self.running = True
-        self.camera_thread = None
-        self.FPS = 20
+        self.FPS = 20 # Note: In this new system, this acts as a 'target' rather than a hard limit
+
         self.setup_routes()
-        self.start_camera_thread()
-        threading.Thread(target=self.processing_loop, daemon=True).start()
+        
+        # Start Threads
+        threading.Thread(target=self.camera_reader_loop, daemon=True).start()
+        threading.Thread(target=self.gpu_processing_loop, daemon=True).start()
 
-    def start_camera_thread(self):
-        if self.camera_thread and self.camera_thread.is_alive():
-            print("⚠️ Camera thread already running")
-            return
-
-        self.camera_thread = threading.Thread(
-            target=self.camera_loop,
-            daemon=True
-        )
-        self.camera_thread.start()
-
-    def camera_loop(self):
-
-        print("📷 Camera thread started")
-
+    # ================= THREAD 1: CAMERA CAPTURE =================
+    def camera_reader_loop(self):
+        print(f"📷 Camera reader started on source: {self.camera_source}")
+        cap = None
+        
         while True:
-
             if not self.running:
+                if cap:
+                    cap.release()
+                    cap = None
                 time.sleep(0.1)
                 continue
 
-            if self.cap is None:
-                print(f"🎥 Connecting to: {self.camera_source}")
-
+            if cap is None or not cap.isOpened():
                 try:
                     if str(self.camera_source).startswith("rtsp://"):
                         cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
                     else:
                         cap = cv2.VideoCapture(self.camera_source)
-
                     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-                    if not cap.isOpened():
-                        print("❌ Failed to open camera")
-                        cap.release()
-                        time.sleep(1)
-                        continue
-
-                    self.cap = cap
-                    print("✅ Camera connected")
-
                 except Exception as e:
-                    print("Camera error:", e)
+                    print(f"❌ Camera connection error: {e}")
                     time.sleep(1)
                     continue
 
-            ret, frame = self.cap.read()
-
+            ret, frame = cap.read()
             if not ret or frame is None:
-                print("⚠️ Frame failed → resetting camera")
-
-                try:
-                    self.cap.release()
-                except:
-                    pass
-
-                self.cap = None
-                time.sleep(0.5)
+                cap.release()
+                cap = None
                 continue
 
-            frame = cv2.resize(frame, (640, 480))
+            # Push only the freshest frame to the GPU worker
+            if not self.input_queue.empty():
+                try: self.input_queue.get_nowait()
+                except: pass
+            self.input_queue.put(frame)
 
-            with self.lock:
-                self.raw_frame = frame.copy()
-    def processing_loop(self):
+    # ================= THREAD 2: GPU PROCESSING =================
+    def gpu_processing_loop(self):
+        print("🧠 GPU Worker Thread active...")
         while True:
+            try:
+                # Grab the next frame from the camera reader
+                raw_frame = self.input_queue.get(timeout=1)
+                frame = cv2.resize(raw_frame, (640, 480))
 
-            if not self.running:
-                time.sleep(0.1)
+                # Copy current pipeline to avoid modification issues
+                current_pipeline = self.pipeline.copy()
+                
+                # Logic for Shelf Orchestrator merge
+                if "Gap Detection" in current_pipeline and "Object Counting" in current_pipeline:
+                    current_pipeline = [s for s in current_pipeline if s not in ["Gap Detection", "Object Counting"]]
+                    current_pipeline.append("Shelf Orchestrator")
+
+                # --- APPLY PIPELINE (Now running on GPU) ---
+                for step in current_pipeline:
+                    if step == "Object Detection":
+                        # Explicitly tell YOLO to use GPU
+                        results = self.model(frame, conf=0.4, device='cuda', verbose=False)
+                        frame = results[0].plot()
+
+                    elif step == "Tracking":
+                        frame = self.human_tracker.process(frame)
+
+                    elif step == "Color Detection":
+                        frame = apply_color_detection(frame)
+
+                    elif step == "Shelf Orchestrator":
+                        frame = self.shelf_orchestrator.process(frame)
+
+                    elif step == "Object Counting":
+                        frame, _ = self.object_counter.process(frame)
+
+                    elif step == "Gap Detection":
+                        frame = self.gap_detector.process(frame)
+
+                    elif step == "Attendance":
+                        frame = self.attendance.process(frame)
+
+                    elif step == "Parking Management":
+                        frame = self.parking_model.process(frame)
+
+                    elif step == "Heatmap":
+                        frame = self.heatmap.process(frame)
+
+                # Push the finished frame to the output queue for streaming
+                if not self.output_queue.empty():
+                    try: self.output_queue.get_nowait()
+                    except: pass
+                self.output_queue.put(frame)
+
+            except Empty:
                 continue
+            except Exception as e:
+                print(f"⚠️ Processing Error: {e}")
 
-            with self.lock:
-                if self.raw_frame is None:
-                    time.sleep(0.01)
-                    continue
-                frame = self.raw_frame.copy()
-
-            pipeline = self.pipeline.copy()
-            if "Gap Detection" in pipeline and "Object Counting" in pipeline:
-                pipeline = [s for s in pipeline if s not in ["Gap Detection", "Object Counting"]]
-                pipeline.append("Shelf Orchestrator")
-
-            # 🔁 APPLY PIPELINE
-            for step in pipeline:
-
-                if step == "Object Detection":
-                    results = self.model(frame, conf=0.4)
-                    for box in results[0].boxes:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-
-                elif step == "Tracking":
-                    frame = self.human_tracker.process(frame)
-
-                elif step == "Color Detection":
-                    frame = apply_color_detection(frame)
-
-                elif step == "Shelf Orchestrator":
-                    frame = self.shelf_orchestrator.process(frame)
-
-                elif step == "Object Counting":
-                    frame, _ = self.object_counter.process(frame)
-
-                elif step == "Gap Detection":
-                    frame = self.gap_detector.process(frame)
-
-                elif step == "Attendance":
-                    frame = self.attendance.process(frame)
-
-                elif step == "Parking Management":
-                    frame = self.parking_model.process(frame)
-
-                elif step == "Heatmap":
-                    frame = self.heatmap.process(frame)
-
-            with self.lock:
-                self.processed_frame = frame
-
-            time.sleep(1 / self.FPS)
-
+    # ================= THREAD 3: FLASK STREAMER =================
     def generate_frames(self):
-
         while True:
-            with self.lock:
-                frame = self.processed_frame.copy() if self.processed_frame is not None else None
+            try:
+                # Get the latest frame processed by the GPU
+                frame = self.output_queue.get(timeout=1)
+                ret, buffer = cv2.imencode(".jpg", frame)
+                if not ret:
+                    continue
 
-            if frame is None:
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" +
+                    buffer.tobytes() +
+                    b"\r\n"
+                )
+            except Empty:
                 time.sleep(0.01)
                 continue
-
-            ret, buffer = cv2.imencode(".jpg", frame)
-            if not ret:
-                continue
-
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" +
-                buffer.tobytes() +
-                b"\r\n"
-            )
 
     def setup_routes(self):
 
         @self.app.route("/video")
         def video():
-            camera_id = request.args.get("camera_id", "default")
-            if camera_id != self.current_camera_id:
-                return Response(f"Camera {camera_id} is not active. Switch camera first.", status=404)
-
             return Response(
                 self.generate_frames(),
                 mimetype="multipart/x-mixed-replace; boundary=frame"
@@ -208,24 +190,20 @@ class LiveStreamServer:
         def set_pipeline():
             camera_id = request.json.get("camera_id", "default")
             new_pipeline = request.json.get("pipeline", [])
-            print("PIPELINE:", new_pipeline, "CAMERA:", camera_id)
+            print(f"📢 PIPELINE UPDATED: {new_pipeline} for {camera_id}")
 
             self.camera_pipelines[camera_id] = new_pipeline
             if camera_id == self.current_camera_id:
                 self.pipeline = new_pipeline
 
                 if "Parking Management" in new_pipeline:
-                    print("🅿️ Parking setup starting...")
-
                     def setup():
                         self.running = False
                         self.parking_model.run_setup()
                         self.running = True
-                        print("✅ Parking setup done")
-
                     threading.Thread(target=setup, daemon=True).start()
 
-            return jsonify({"status": "ok", "camera_id": camera_id, "pipeline": new_pipeline})
+            return jsonify({"status": "ok", "camera_id": camera_id})
 
         @self.app.route("/set_camera", methods=["POST"])
         def set_camera():
@@ -236,24 +214,8 @@ class LiveStreamServer:
             if not new_url:
                 return jsonify({"status": "missing camera url"}), 400
 
-            print("Switching camera to:", camera_id, new_url)
-
-            # 🛑 Pause
             self.running = False
-
             time.sleep(0.5)
-
-            if self.cap:
-                try:
-                    self.cap.release()
-                except:
-                    pass
-
-            self.cap = None
-
-            with self.lock:
-                self.raw_frame = None
-                self.processed_frame = None
 
             self.camera_sources[camera_id] = new_url
             self.current_camera_id = camera_id
@@ -261,8 +223,7 @@ class LiveStreamServer:
             self.pipeline = self.camera_pipelines.get(camera_id, [])
 
             self.running = True
-
-            return jsonify({"status": "camera switched", "camera_id": camera_id, "pipeline": self.pipeline})
+            return jsonify({"status": "camera switched", "camera_id": camera_id})
 
         @self.app.route("/attendance_results")
         def attendance_results():
@@ -275,41 +236,26 @@ class LiveStreamServer:
         
         @self.app.route("/upload_attendance_images", methods=["POST"])
         def upload_images():
-
             if "images" not in request.files:
                 return jsonify({"message": "No files received"}), 400
 
             files = request.files.getlist("images")
-
-            if not files:
-                return jsonify({"message": "Empty file list"}), 400
-
             saved_files = []
 
             for file in files:
-                if file.filename == "":
-                    continue
-
+                if file.filename == "": continue
                 name = os.path.splitext(file.filename)[0]
                 filepath = os.path.join("attendance_images", file.filename)
                 file.save(filepath)
                 saved_files.append(filepath)
                 self.attendance.add_image(filepath, name)
 
-            return jsonify({
-                "status": "success",
-                "saved": saved_files
-            }), 200
+            return jsonify({"status": "success", "saved": saved_files}), 200
 
     def run(self):
-        print("🚀 Server running...")
-        self.app.run(
-            host="127.0.0.1",
-            port=5000,
-            debug=False,
-            use_reloader=False
-        )
-
+        print("🚀 ModuVision Server Running at http://127.0.0.1:5000")
+        # In WSL2, host '0.0.0.0' makes it easier for Windows to find the server
+        self.app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
     server = LiveStreamServer()
