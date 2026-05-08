@@ -1,10 +1,16 @@
 import os
 import cv2
 import time
+import asyncio
 import threading
 from queue import Queue, Empty
-from flask import Flask, Response, request, jsonify
-from flask_cors import CORS
+from concurrent.futures import ThreadPoolExecutor
+
+from fastapi import FastAPI, UploadFile, File, Request
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+
 from ultralytics import YOLO
 
 # --- YOUR ORIGINAL IMPORTS ---
@@ -18,54 +24,69 @@ from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
 
+
+# ─── JPEG encode runs in a thread pool so it never blocks the async event loop ───
+_encode_executor = ThreadPoolExecutor(max_workers=2)
+
+
+def _encode_frame(frame, quality: int = 80):
+    """Synchronous JPEG encode — called via run_in_executor."""
+    ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    return buffer.tobytes() if ret else None
+
+
 class LiveStreamServer:
 
     def __init__(self):
-        self.app = Flask(__name__)
-        CORS(self.app)
+        self.app = FastAPI()
+
+        # ── CORS (same as before) ──
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
         # ================= 1. GPU MODEL INITIALIZATION =================
         print("🚀 Initializing GPU Models for ModuVision...")
-        
-        # Main YOLO model moved to GPU
+
         self.model = YOLO("yolov8s.pt")
-        self.model.to('cuda') 
-        
-        # Initialize blocks (Ensure their internal models also use .to('cuda') if needed)
-        self.human_tracker = HumanTracker()
-        self.object_counter = ObjectCounterBlock()
-        self.dual_counter = DualModelObjectCounter()
-        self.gap_detector = ShelfGapDetector()
-        self.attendance = AttendanceSystem() # Attendance handles its own GPU via InsightFace ctx_id=0
-        self.parking_model = ParkingManagementBlock()
-        self.heatmap = HeatmapBlock()
+        self.model.to("cuda")
+
+        self.human_tracker      = HumanTracker()
+        self.object_counter     = ObjectCounterBlock()
+        self.dual_counter       = DualModelObjectCounter()
+        self.gap_detector       = ShelfGapDetector()
+        self.attendance         = AttendanceSystem()   # handles its own GPU via InsightFace ctx_id=0
+        self.parking_model      = ParkingManagementBlock()
+        self.heatmap            = HeatmapBlock()
         self.shelf_orchestrator = ShelfOrchestrator()
 
-        # ================= 2. QUEUE SYSTEM (For Speed) =================
-        # This replaces the old 'self.lock' system to allow parallel processing
-        self.input_queue = Queue(maxsize=1)   # Fresh frames from camera
-        self.output_queue = Queue(maxsize=1)  # Processed frames for web
+        # ================= 2. QUEUE SYSTEM =================
+        self.input_queue  = Queue(maxsize=1)   # fresh frames from camera
+        self.output_queue = Queue(maxsize=1)   # processed frames for web
 
         # ================= 3. STATE MANAGEMENT =================
-        self.pipeline = []
-        self.camera_pipelines = {"default": []}
-        self.camera_source = 1
-        self.camera_sources = {"default": self.camera_source}
-        self.current_camera_id = "default"
-        self.running = True
-        self.FPS = 20 # Note: In this new system, this acts as a 'target' rather than a hard limit
+        self.pipeline           = []
+        self.camera_pipelines   = {"default": []}
+        self.camera_source      = 1
+        self.camera_sources     = {"default": self.camera_source}
+        self.current_camera_id  = "default"
+        self.running            = True
+        self.FPS                = 20   # target; actual rate is queue-driven
 
         self.setup_routes()
-        
-        # Start Threads
+
+        # Start background threads
         threading.Thread(target=self.camera_reader_loop, daemon=True).start()
-        threading.Thread(target=self.gpu_processing_loop, daemon=True).start()
+        threading.Thread(target=self.gpu_processing_loop,  daemon=True).start()
 
     # ================= THREAD 1: CAMERA CAPTURE =================
     def camera_reader_loop(self):
         print(f"📷 Camera reader started on source: {self.camera_source}")
         cap = None
-        
+
         while True:
             if not self.running:
                 if cap:
@@ -92,10 +113,12 @@ class LiveStreamServer:
                 cap = None
                 continue
 
-            # Push only the freshest frame to the GPU worker
+            # Always keep only the freshest frame
             if not self.input_queue.empty():
-                try: self.input_queue.get_nowait()
-                except: pass
+                try:
+                    self.input_queue.get_nowait()
+                except Exception:
+                    pass
             self.input_queue.put(frame)
 
     # ================= THREAD 2: GPU PROCESSING =================
@@ -103,24 +126,24 @@ class LiveStreamServer:
         print("🧠 GPU Worker Thread active...")
         while True:
             try:
-                # Grab the next frame from the camera reader
                 raw_frame = self.input_queue.get(timeout=1)
                 frame = cv2.resize(raw_frame, (640, 480))
 
-                # Copy current pipeline to avoid modification issues
                 current_pipeline = self.pipeline.copy()
-                
-                # Logic for Shelf Orchestrator merge
+
+                # Merge Gap Detection + Object Counting → Shelf Orchestrator
                 if "Gap Detection" in current_pipeline and "Object Counting" in current_pipeline:
-                    current_pipeline = [s for s in current_pipeline if s not in ["Gap Detection", "Object Counting"]]
+                    current_pipeline = [
+                        s for s in current_pipeline
+                        if s not in ("Gap Detection", "Object Counting")
+                    ]
                     current_pipeline.append("Shelf Orchestrator")
 
-                # --- APPLY PIPELINE (Now running on GPU) ---
+                # --- APPLY PIPELINE (GPU) ---
                 for step in current_pipeline:
                     if step == "Object Detection":
-                        # Explicitly tell YOLO to use GPU
-                        results = self.model(frame, conf=0.4, device='cuda', verbose=False)
-                        frame = results[0].plot()
+                        results = self.model(frame, conf=0.4, device="cuda", verbose=False)
+                        frame   = results[0].plot()
 
                     elif step == "Tracking":
                         frame = self.human_tracker.process(frame)
@@ -146,10 +169,12 @@ class LiveStreamServer:
                     elif step == "Heatmap":
                         frame = self.heatmap.process(frame)
 
-                # Push the finished frame to the output queue for streaming
+                # Push finished frame — drop stale one if present
                 if not self.output_queue.empty():
-                    try: self.output_queue.get_nowait()
-                    except: pass
+                    try:
+                        self.output_queue.get_nowait()
+                    except Exception:
+                        pass
                 self.output_queue.put(frame)
 
             except Empty:
@@ -157,39 +182,63 @@ class LiveStreamServer:
             except Exception as e:
                 print(f"⚠️ Processing Error: {e}")
 
-    # ================= THREAD 3: FLASK STREAMER =================
-    def generate_frames(self):
+    # ================= ASYNC STREAM GENERATOR =================
+    async def generate_frames(self):
+        """
+        Async generator for MJPEG streaming.
+        - JPEG encoding is offloaded to a thread-pool executor so it never
+          blocks the uvicorn event loop (which would stall OTHER requests).
+        - asyncio.sleep(0) yields control between frames so the GPU worker
+          thread can schedule work without being starved.
+        """
+        loop = asyncio.get_event_loop()
         while True:
             try:
-                # Get the latest frame processed by the GPU
-                frame = self.output_queue.get(timeout=1)
-                ret, buffer = cv2.imencode(".jpg", frame)
-                if not ret:
+                # Non-blocking peek; if empty, yield control and retry
+                if self.output_queue.empty():
+                    await asyncio.sleep(0.005)
+                    continue
+
+                frame = self.output_queue.get_nowait()
+
+                # Encode in thread pool — frees the event loop during CPU work
+                jpeg_bytes = await loop.run_in_executor(
+                    _encode_executor, _encode_frame, frame, 80
+                )
+                if jpeg_bytes is None:
                     continue
 
                 yield (
                     b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n" +
-                    buffer.tobytes() +
-                    b"\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n"
+                    + jpeg_bytes
+                    + b"\r\n"
                 )
-            except Empty:
-                time.sleep(0.01)
-                continue
 
+                # Yield control so uvicorn can handle other coroutines
+                await asyncio.sleep(0)
+
+            except Empty:
+                await asyncio.sleep(0.005)
+            except Exception as e:
+                print(f"⚠️ Stream error: {e}")
+                await asyncio.sleep(0.01)
+
+    # ================= ROUTES =================
     def setup_routes(self):
 
-        @self.app.route("/video")
-        def video():
-            return Response(
+        @self.app.get("/video")
+        async def video():
+            return StreamingResponse(
                 self.generate_frames(),
-                mimetype="multipart/x-mixed-replace; boundary=frame"
+                media_type="multipart/x-mixed-replace; boundary=frame",
             )
 
-        @self.app.route("/set_pipeline", methods=["POST"])
-        def set_pipeline():
-            camera_id = request.json.get("camera_id", "default")
-            new_pipeline = request.json.get("pipeline", [])
+        @self.app.post("/set_pipeline")
+        async def set_pipeline(request: Request):
+            data        = await request.json()
+            camera_id   = data.get("camera_id", "default")
+            new_pipeline = data.get("pipeline", [])
             print(f"📢 PIPELINE UPDATED: {new_pipeline} for {camera_id}")
 
             self.camera_pipelines[camera_id] = new_pipeline
@@ -203,59 +252,71 @@ class LiveStreamServer:
                         self.running = True
                     threading.Thread(target=setup, daemon=True).start()
 
-            return jsonify({"status": "ok", "camera_id": camera_id})
+            return {"status": "ok", "camera_id": camera_id}
 
-        @self.app.route("/set_camera", methods=["POST"])
-        def set_camera():
-            data = request.json
+        @self.app.post("/set_camera")
+        async def set_camera(request: Request):
+            data      = await request.json()
             camera_id = data.get("camera_id", "default")
-            new_url = data.get("url") or self.camera_sources.get(camera_id)
+            new_url   = data.get("url") or self.camera_sources.get(camera_id)
 
             if not new_url:
-                return jsonify({"status": "missing camera url"}), 400
+                return JSONResponse({"status": "missing camera url"}, status_code=400)
 
             self.running = False
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)
 
-            self.camera_sources[camera_id] = new_url
-            self.current_camera_id = camera_id
-            self.camera_source = new_url
-            self.pipeline = self.camera_pipelines.get(camera_id, [])
+            self.camera_sources[camera_id]  = new_url
+            self.current_camera_id          = camera_id
+            self.camera_source              = new_url
+            self.pipeline                   = self.camera_pipelines.get(camera_id, [])
 
             self.running = True
-            return jsonify({"status": "camera switched", "camera_id": camera_id})
+            return {"status": "camera switched", "camera_id": camera_id}
 
-        @self.app.route("/attendance_results")
-        def attendance_results():
-            return jsonify(self.attendance.get_results())
+        @self.app.get("/attendance_results")
+        async def attendance_results():
+            return JSONResponse(self.attendance.get_results())
 
-        @self.app.route("/reset_attendance")
-        def reset_attendance():
+        @self.app.get("/reset_attendance")
+        async def reset_attendance():
             self.attendance.reset()
-            return jsonify({"status": "reset done"})
-        
-        @self.app.route("/upload_attendance_images", methods=["POST"])
-        def upload_images():
-            if "images" not in request.files:
-                return jsonify({"message": "No files received"}), 400
+            return {"status": "reset done"}
 
-            files = request.files.getlist("images")
+        @self.app.post("/upload_attendance_images")
+        async def upload_images(images: list[UploadFile] = File(...)):
+            if not images:
+                return JSONResponse({"message": "No files received"}, status_code=400)
+
             saved_files = []
+            os.makedirs("attendance_images", exist_ok=True)
 
-            for file in files:
-                if file.filename == "": continue
-                name = os.path.splitext(file.filename)[0]
+            for file in images:
+                if not file.filename:
+                    continue
+                name     = os.path.splitext(file.filename)[0]
                 filepath = os.path.join("attendance_images", file.filename)
-                file.save(filepath)
+                contents = await file.read()
+                with open(filepath, "wb") as f:
+                    f.write(contents)
                 saved_files.append(filepath)
                 self.attendance.add_image(filepath, name)
 
-            return jsonify({"status": "success", "saved": saved_files}), 200
+            return JSONResponse({"status": "success", "saved": saved_files}, status_code=200)
 
     def run(self):
-        print("🚀 ModuVision Server Running at http://127.0.0.1:5000")
-        # In WSL2, host '0.0.0.0' makes it easier for Windows to find the server
-        self.app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+        print("🚀 ModuVision Server Running at http://0.0.0.0:5000")
+        uvicorn.run(
+            self.app,
+            host="0.0.0.0",
+            port=5000,
+            workers=1,          # must be 1 — GPU state lives in this process
+            log_level="warning",
+            # NOTE: loop="uvloop" was removed — uvloop is Linux/macOS only.
+            # On Windows, uvicorn uses the default asyncio ProactorEventLoop which
+            # is fully async and works correctly. No performance loss on Windows.
+        )
+
 
 if __name__ == "__main__":
     server = LiveStreamServer()
