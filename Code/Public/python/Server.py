@@ -20,6 +20,7 @@ from object_countingtry import ObjectCounterBlock
 from two_models import DualModelObjectCounter
 from shelf_gap_detect_images import ShelfGapDetector
 from attendence import AttendanceSystem
+from security import SecuritySystem
 from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
@@ -59,6 +60,7 @@ class LiveStreamServer:
         self.dual_counter       = DualModelObjectCounter()
         self.gap_detector       = ShelfGapDetector()
         self.attendance         = AttendanceSystem()   # handles its own GPU via InsightFace ctx_id=0
+        self.security           = SecuritySystem()     # handles security monitoring on GPU
         self.parking_model      = ParkingManagementBlock()
         self.heatmap            = HeatmapBlock()
         self.shelf_orchestrator = ShelfOrchestrator()
@@ -141,11 +143,7 @@ class LiveStreamServer:
 
                 # --- APPLY PIPELINE (GPU) ---
                 for step in current_pipeline:
-                    if step == "Object Detection":
-                        results = self.model(frame, conf=0.4, device="cuda", verbose=False)
-                        frame   = results[0].plot()
-
-                    elif step == "Tracking":
+                    if step == "Tracking":
                         frame = self.human_tracker.process(frame)
 
                     elif step == "Color Detection":
@@ -162,6 +160,9 @@ class LiveStreamServer:
 
                     elif step == "Attendance":
                         frame = self.attendance.process(frame)
+
+                    elif step == "Security":
+                        frame = self.security.process(frame)
 
                     elif step == "Parking Management":
                         frame = self.parking_model.process(frame)
@@ -303,6 +304,34 @@ class LiveStreamServer:
                 self.attendance.add_image(filepath, name)
 
             return JSONResponse({"status": "success", "saved": saved_files}, status_code=200)
+
+        # ================= SECURITY ENDPOINTS =================
+        @self.app.get("/security_results")
+        async def security_results():
+            """Get current security monitoring results and alerts."""
+            return JSONResponse(self.security.get_results())
+
+        @self.app.get("/reset_security")
+        async def reset_security():
+            """Reset security system alerts and logs."""
+            self.security.reset()
+            return {"status": "security reset done"}
+
+        @self.app.post("/security_config")
+        async def security_config(request: Request):
+            """Configure security system parameters."""
+            data = await request.json()
+            threshold = data.get("confidence_threshold", self.security.confidence_threshold)
+            enable_alerts = data.get("enable_email_alerts", self.security.enable_email_alerts)
+            
+            self.security.confidence_threshold = threshold
+            self.security.enable_email_alerts = enable_alerts
+            
+            return {
+                "status": "ok",
+                "confidence_threshold": threshold,
+                "enable_email_alerts": enable_alerts
+            }
 
     def run(self):
         print("🚀 ModuVision Server Running at http://0.0.0.0:5000")

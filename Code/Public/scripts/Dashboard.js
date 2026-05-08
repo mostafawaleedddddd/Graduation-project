@@ -575,9 +575,9 @@ async function uploadProject() {
         pipeline[0] === "Gap Detection" ||
         pipeline[0] === "Tracking" ||
         pipeline[0] === "Attendance" ||
+        pipeline[0] === "Security" ||
         pipeline[0] === "Parking Management" ||
         pipeline[0] === "Heatmap" ||
-        pipeline[0] === "Object Detection" ||
         pipeline[0] === "Color Detection"
       );
 
@@ -588,7 +588,7 @@ async function uploadProject() {
         <p style='color: #ff6b6b; margin-bottom: 10px;'>Invalid pipeline configuration!</p>
         <p><b>Allowed setups:</b></p>
         <ul style='color: #c9d1d9; line-height: 1.6;'>
-            <li>Single model only</li>
+            <li>Single model only (Tracking, Attendance, Security, Parking, etc.)</li>
             <li>Object Counting + Gap Detection</li>
             <li>Tracking + Attendance</li>
         </ul>

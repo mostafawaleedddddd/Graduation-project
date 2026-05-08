@@ -1,0 +1,294 @@
+from pathlib import Path
+from threading import Thread
+from time import perf_counter
+from datetime import datetime
+from collections import deque
+
+import numpy as np
+import torch
+import cv2
+from ultralytics import YOLO
+import supervision as sv
+from emailsettings import RECEIVER_EMAIL, send_email
+
+
+# ================= CONFIGURATION =================
+MODEL_CANDIDATES = (
+    "yolov8n.pt",
+    "yolo26n.pt",
+)
+INFERENCE_IMAGE_SIZE = 416
+INFERENCE_EVERY_N_FRAMES = 2
+EMAIL_JPEG_QUALITY = 95
+ALERT_RESET_FRAMES = 45  # Reset alert after 45 frames of no detection
+
+
+def send_security_alert_async(people_count=1, frame=None):
+    """Send security alert email asynchronously."""
+    image_bytes = None
+    if frame is not None:
+        success, encoded_img = cv2.imencode(
+            ".jpg",
+            frame,
+            [int(cv2.IMWRITE_JPEG_QUALITY), EMAIL_JPEG_QUALITY],
+        )
+        if success:
+            image_bytes = encoded_img.tobytes()
+
+    sent = send_email(
+        subject=f"Security Alert: {people_count} people detected",
+        body=f"ALERT - {people_count} person detected in the latest camera frame.",
+        image_bytes=image_bytes,
+    )
+    if sent:
+        print("✅ Alert email sent to", RECEIVER_EMAIL)
+
+
+class SecuritySystem:
+    """Security monitoring system for real-time person detection and threat alerts."""
+
+    def __init__(self, confidence_threshold=0.5, enable_email_alerts=True):
+        """
+        Initialize the SecuritySystem.
+        
+        Args:
+            confidence_threshold: Confidence threshold for person detection
+            enable_email_alerts: Enable email alerts for intrusions
+        """
+        self.confidence_threshold = confidence_threshold
+        self.enable_email_alerts = enable_email_alerts
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        if self.device == "cuda":
+            torch.backends.cudnn.benchmark = True
+            
+        print(f"🔒 Security System initializing on {self.device.upper()}")
+        
+        # ================= LOAD GPU MODEL =================
+        self.model = self._load_model()
+        self.model_path = self.model.ckpt_path or "loaded model"
+        self.class_names = self.model.model.names
+        
+        # Find person class IDs
+        self.person_class_ids = [
+            int(class_id)
+            for class_id, class_name in self.class_names.items()
+            if class_name.lower() == "person"
+        ]
+        
+        if not self.person_class_ids:
+            print("⚠️ Warning: model has no 'person' class. Model names:", self.class_names)
+        else:
+            print(f"✅ Person detection ready. Class IDs: {self.person_class_ids}")
+            print(f"📦 Model: {self.model_path}")
+        
+        # ================= VISUALIZATION TOOLS =================
+        self.box_annotator = sv.BoxAnnotator(thickness=2)
+        self.label_annotator = sv.LabelAnnotator()
+        
+        # ================= STATE MANAGEMENT =================
+        self.alert_active = False
+        self.missing_person_frames = 0
+        self.absence_reset_frames = ALERT_RESET_FRAMES
+        self.last_frame_time = perf_counter()
+        self.current_fps = 0.0
+        self.frame_counter = 0
+        self.last_results = None
+        
+        # ================= SECURITY LOG =================
+        self.detection_log = deque(maxlen=100)
+        self.alert_log = deque(maxlen=50)
+        
+        print("✅ Security System initialized successfully")
+
+    def _load_model(self):
+        """Load YOLO model with person detection capability."""
+        for candidate in MODEL_CANDIDATES:
+            candidate_path = Path(__file__).with_name(candidate)
+            if not candidate_path.exists():
+                continue
+
+            model = YOLO(str(candidate_path))
+            model.fuse()
+
+            names = model.model.names
+            has_person = any(str(name).lower() == "person" for name in names.values())
+            if has_person:
+                print(f"📦 Loaded model: {candidate}")
+                return model
+
+        raise FileNotFoundError(
+            f"❌ Could not find YOLO model with 'person' class. Tried: {', '.join(MODEL_CANDIDATES)}"
+        )
+
+    def _process_frame_gpu(self, frame):
+        """Run YOLO inference on GPU."""
+        return self.model(
+            frame,
+            conf=self.confidence_threshold,
+            classes=self.person_class_ids or None,
+            device=self.device,
+            imgsz=INFERENCE_IMAGE_SIZE,
+            half=self.device == "cuda",
+            verbose=False,
+        )
+
+    def _update_fps(self):
+        """Update FPS calculation."""
+        now = perf_counter()
+        delta = now - self.last_frame_time
+        if delta > 0:
+            instant_fps = 1.0 / delta
+            self.current_fps = (
+                instant_fps 
+                if self.current_fps == 0 
+                else (self.current_fps * 0.85 + instant_fps * 0.15)
+            )
+        self.last_frame_time = now
+
+    def _annotate_frame(self, frame, detections, labels, person_count):
+        """Draw bounding boxes and labels on frame."""
+        annotated_frame = self.box_annotator.annotate(
+            scene=frame.copy(), 
+            detections=detections
+        )
+        annotated_frame = self.label_annotator.annotate(
+            scene=annotated_frame,
+            detections=detections,
+            labels=labels,
+        )
+        
+        # Add security info text
+        text = f"People: {person_count} | FPS: {self.current_fps:.1f}"
+        color = (0, 255, 0) if person_count == 0 else (0, 165, 255)
+        
+        cv2.putText(
+            annotated_frame,
+            text,
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            color,
+            2,
+        )
+        
+        # Add alert status
+        if self.alert_active:
+            cv2.putText(
+                annotated_frame,
+                "🚨 ALERT ACTIVE 🚨",
+                (10, 70),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 0, 255),
+                2,
+            )
+        
+        return annotated_frame
+
+    def _log_detection(self, person_count):
+        """Log detection event to history."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.detection_log.append({
+            "timestamp": timestamp,
+            "people_count": person_count,
+            "alert_active": self.alert_active
+        })
+
+    def _log_alert(self, person_count):
+        """Log alert event to history."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.alert_log.append({
+            "timestamp": timestamp,
+            "people_count": person_count,
+            "message": f"Security alert: {person_count} person(s) detected"
+        })
+
+    def process(self, frame):
+        """
+        Process frame for security threats.
+        
+        Args:
+            frame: Input video frame
+            
+        Returns:
+            Annotated frame with detections and alerts
+        """
+        self._update_fps()
+        self.frame_counter += 1
+        
+        # ================= RUN INFERENCE =================
+        should_infer = (
+            self.last_results is None
+            or self.frame_counter % INFERENCE_EVERY_N_FRAMES == 0
+        )
+        
+        if should_infer:
+            self.last_results = self._process_frame_gpu(frame)
+
+        results = self.last_results
+        
+        # ================= PARSE DETECTIONS =================
+        detections = sv.Detections.from_ultralytics(results[0])
+        labels = []
+        person_count = 0
+
+        if results[0].boxes is not None and results[0].boxes.cls is not None:
+            confidences = results[0].boxes.conf.tolist()
+            for cls, confidence in zip(results[0].boxes.cls, confidences):
+                class_id = int(cls)
+                if class_id in self.person_class_ids:
+                    person_count += 1
+                    labels.append(f"person {confidence:.2f}")
+
+        # ================= ALERT LOGIC =================
+        if person_count > 0:
+            self.missing_person_frames = 0
+            self._log_detection(person_count)
+            
+            if not self.alert_active:
+                # New intrusion detected
+                if self.enable_email_alerts:
+                    alert_frame = self._annotate_frame(
+                        frame, detections, labels, person_count
+                    )
+                    Thread(
+                        target=send_security_alert_async,
+                        args=(person_count, alert_frame.copy()),
+                        daemon=True,
+                    ).start()
+                
+                self._log_alert(person_count)
+                self.alert_active = True
+                print(f"🚨 SECURITY ALERT: {person_count} person(s) detected!")
+        else:
+            self.missing_person_frames += 1
+            self._log_detection(person_count)
+            
+            # Reset alert after absence
+            if self.alert_active and self.missing_person_frames >= self.absence_reset_frames:
+                self.alert_active = False
+                self.missing_person_frames = 0
+                print("✅ Scene cleared. Ready for next detection.")
+
+        # ================= DRAW FRAME =================
+        annotated_frame = self._annotate_frame(frame, detections, labels, person_count)
+        
+        return annotated_frame
+
+    def get_results(self):
+        """Get security detection log."""
+        return {
+            "detections": list(self.detection_log),
+            "alerts": list(self.alert_log),
+            "alert_active": self.alert_active,
+            "total_alerts": len(self.alert_log)
+        }
+
+    def reset(self):
+        """Reset security system state."""
+        self.alert_active = False
+        self.missing_person_frames = 0
+        self.detection_log.clear()
+        self.alert_log.clear()
+        print("🔄 Security system reset")
