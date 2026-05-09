@@ -3,10 +3,9 @@ import cv2
 import time
 import asyncio
 import threading
-from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import FastAPI, UploadFile, File, Request
+from fastapi import FastAPI, UploadFile, File, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -25,15 +24,73 @@ from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
 
+# ── NEW: Dynamic NMN ─────────────────────────────────────────────────────────
+from NMN import (
+    DynamicNMN,
+    tracking_extractor,
+    object_count_extractor,
+)
 
-# ─── JPEG encode runs in a thread pool so it never blocks the async event loop ───
+# ─── Thread pool for JPEG encoding (keeps async loop free) ───────────────────
 _encode_executor = ThreadPoolExecutor(max_workers=2)
 
 
-def _encode_frame(frame, quality: int = 80):
+def _encode_frame(frame, quality: int = 75):
     """Synchronous JPEG encode — called via run_in_executor."""
     ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
     return buffer.tobytes() if ret else None
+
+
+# ─── Atomic frame store ───────────────────────────────────────────────────────
+class AtomicFrame:
+    def __init__(self):
+        self._frame = None
+        self._lock  = threading.Lock()
+        self._event = threading.Event()
+
+    def put(self, frame):
+        with self._lock:
+            self._frame = frame
+        self._event.set()
+
+    def get(self, timeout: float = 1.0):
+        if self._event.wait(timeout):
+            self._event.clear()
+            with self._lock:
+                return self._frame
+        return None
+
+    def get_nowait(self):
+        with self._lock:
+            return self._frame
+
+    @property
+    def ready(self):
+        return self._frame is not None
+
+
+# ─── Frame-skip config ────────────────────────────────────────────────────────
+HEAVY_MODELS = {"Attendance", "Security", "Shelf Orchestrator", "Gap Detection", "Heatmap"}
+SKIP_N       = 2
+
+# ─── NMN is active when this set of module names is the pipeline ─────────────
+#     Extend this set to test additional combinations in the future.
+NMN_TRIGGER_SETS = [
+    {"Attendance", "Tracking"},           # ← active test case (user request)
+    {"Security",   "Tracking"},           # ← ready for future test
+    {"Heatmap",    "Tracking"},           # ← ready for future test
+    {"Attendance", "Security", "Tracking"},
+]
+
+
+def _pipeline_uses_nmn(pipeline: list) -> bool:
+    """
+    Returns True when the active pipeline is a superset of any NMN trigger set.
+    Example: pipeline = ["Tracking", "Attendance", "Color Detection"]
+             → True  (contains {"Attendance", "Tracking"})
+    """
+    pipeline_set = set(pipeline)
+    return any(trigger <= pipeline_set for trigger in NMN_TRIGGER_SETS)
 
 
 class LiveStreamServer:
@@ -41,7 +98,6 @@ class LiveStreamServer:
     def __init__(self):
         self.app = FastAPI()
 
-        # ── CORS (same as before) ──
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -59,30 +115,103 @@ class LiveStreamServer:
         self.object_counter     = ObjectCounterBlock()
         self.dual_counter       = DualModelObjectCounter()
         self.gap_detector       = ShelfGapDetector()
-        self.attendance         = AttendanceSystem()   # handles its own GPU via InsightFace ctx_id=0
-        self.security           = SecuritySystem()     # handles security monitoring on GPU
+        self.attendance         = AttendanceSystem()
+        self.security           = SecuritySystem()
         self.parking_model      = ParkingManagementBlock()
         self.heatmap            = HeatmapBlock()
         self.shelf_orchestrator = ShelfOrchestrator()
 
-        # ================= 2. QUEUE SYSTEM =================
-        self.input_queue  = Queue(maxsize=1)   # fresh frames from camera
-        self.output_queue = Queue(maxsize=1)   # processed frames for web
+        # ================= 2. DYNAMIC NMN SETUP =================
+        # Models are injected ONCE here — NMN never loads them again.
+        # raw_process_fn wraps each model's existing .process() signature.
+        # context_extract_fn pulls metadata after inference (optional).
+        print("🧩 Initialising Dynamic NMN...")
+        self.nmn = DynamicNMN(num_workers=4)
 
-        # ================= 3. STATE MANAGEMENT =================
-        self.pipeline           = []
-        self.camera_pipelines   = {"default": []}
-        self.camera_source      = 1
-        self.camera_sources     = {"default": self.camera_source}
-        self.current_camera_id  = "default"
-        self.running            = True
-        self.FPS                = 20   # target; actual rate is queue-driven
+        self.nmn.register(
+            "Tracking",
+            self.human_tracker,
+            raw_process_fn=self.human_tracker.process,
+            # ── context_extract_fn pulls tracked bounding boxes ──────────
+            # Requires HumanTracker.get_tracks() — see NMN.py §7 for how to
+            # add it.  Works with or without it; downstream modules degrade
+            # gracefully to full-frame processing when context is absent.
+            context_extract_fn=tracking_extractor,
+        )
+
+        self.nmn.register(
+            "Attendance",
+            self.attendance,
+            raw_process_fn=self.attendance.process,
+            # No extract_fn needed — Attendance is a consumer, not a producer.
+        )
+
+        self.nmn.register(
+            "Security",
+            self.security,
+            raw_process_fn=self.security.process,
+        )
+
+        self.nmn.register(
+            "Heatmap",
+            self.heatmap,
+            raw_process_fn=self.heatmap.process,
+        )
+
+        self.nmn.register(
+            "Object Counting",
+            self.object_counter,
+            # ObjectCounterBlock.process() returns (frame, _) — unwrap the tuple.
+            raw_process_fn=lambda f: self.object_counter.process(f)[0],
+            context_extract_fn=object_count_extractor,
+        )
+
+        self.nmn.register(
+            "Gap Detection",
+            self.gap_detector,
+            raw_process_fn=self.gap_detector.process,
+        )
+
+        self.nmn.register(
+            "Color Detection",
+            None,                           # stateless helper, no model object
+            raw_process_fn=apply_color_detection,
+        )
+
+        self.nmn.register(
+            "Parking Management",
+            self.parking_model,
+            raw_process_fn=self.parking_model.process,
+        )
+
+        print("✅ NMN ready — all modules registered.")
+
+        # ================= 3. ATOMIC FRAME STORES =================
+        self.latest_raw    = AtomicFrame()
+        self.latest_output = AtomicFrame()
+
+        # ================= 4. STATE MANAGEMENT =================
+        self.pipeline          = []
+        self.camera_pipelines  = {"default": []}
+        self.camera_source     = 1
+        self.camera_sources    = {"default": self.camera_source}
+        self.current_camera_id = "default"
+        self.running           = True
+        self.FPS               = 20
+
+        self._frame_count      = 0
+
+        # Flag: is the NMN currently the active processor?
+        # Set in set_pipeline — avoids re-checking every frame.
+        self._nmn_active       = False
+
+        self._ws_clients: list[WebSocket] = []
+        self._ws_lock = threading.Lock()
 
         self.setup_routes()
 
-        # Start background threads
-        threading.Thread(target=self.camera_reader_loop, daemon=True).start()
-        threading.Thread(target=self.gpu_processing_loop,  daemon=True).start()
+        threading.Thread(target=self.camera_reader_loop,  daemon=True).start()
+        threading.Thread(target=self.gpu_processing_loop, daemon=True).start()
 
     # ================= THREAD 1: CAMERA CAPTURE =================
     def camera_reader_loop(self):
@@ -103,7 +232,12 @@ class LiveStreamServer:
                         cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
                     else:
                         cap = cv2.VideoCapture(self.camera_source)
+
                     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    cap.set(cv2.CAP_PROP_FPS, 30)
+
                 except Exception as e:
                     print(f"❌ Camera connection error: {e}")
                     time.sleep(1)
@@ -115,22 +249,43 @@ class LiveStreamServer:
                 cap = None
                 continue
 
-            # Always keep only the freshest frame
-            if not self.input_queue.empty():
-                try:
-                    self.input_queue.get_nowait()
-                except Exception:
-                    pass
-            self.input_queue.put(frame)
+            self.latest_raw.put(frame)
 
     # ================= THREAD 2: GPU PROCESSING =================
     def gpu_processing_loop(self):
         print("🧠 GPU Worker Thread active...")
         while True:
             try:
-                raw_frame = self.input_queue.get(timeout=1)
-                frame = cv2.resize(raw_frame, (640, 480))
+                raw_frame = self.latest_raw.get(timeout=1)
+                if raw_frame is None:
+                    continue
 
+                frame = cv2.resize(raw_frame, (640, 480))
+                self._frame_count += 1
+                run_heavy = (self._frame_count % SKIP_N == 0)
+
+                # ── NMN PATH ────────────────────────────────────────────────
+                # When the active pipeline triggered NMN mode, hand the entire
+                # frame to the DynamicNMN.  It handles ordering, context
+                # sharing, bridge functions, and parallel execution internally.
+                #
+                # The NMN is already configured for this pipeline (set_modules
+                # was called in set_pipeline when the pipeline changed), so
+                # process() here is just inference — no graph rebuild, no
+                # model loading.
+                if self._nmn_active:
+                    if not run_heavy:
+                        # For heavy NMN pipelines reuse last output on skip frames
+                        cached = self.latest_output.get_nowait()
+                        if cached is not None:
+                            frame = cached
+                    else:
+                        frame = self.nmn.process(frame)
+
+                    self.latest_output.put(frame)
+                    continue   # skip the classic pipeline below
+
+                # ── CLASSIC PIPELINE PATH (unchanged from original) ──────────
                 current_pipeline = self.pipeline.copy()
 
                 # Merge Gap Detection + Object Counting → Shelf Orchestrator
@@ -141,8 +296,14 @@ class LiveStreamServer:
                     ]
                     current_pipeline.append("Shelf Orchestrator")
 
-                # --- APPLY PIPELINE (GPU) ---
                 for step in current_pipeline:
+
+                    if step in HEAVY_MODELS and not run_heavy:
+                        cached = self.latest_output.get_nowait()
+                        if cached is not None:
+                            frame = cached
+                        break
+
                     if step == "Tracking":
                         frame = self.human_tracker.process(frame)
 
@@ -170,60 +331,59 @@ class LiveStreamServer:
                     elif step == "Heatmap":
                         frame = self.heatmap.process(frame)
 
-                # Push finished frame — drop stale one if present
-                if not self.output_queue.empty():
-                    try:
-                        self.output_queue.get_nowait()
-                    except Exception:
-                        pass
-                self.output_queue.put(frame)
+                self.latest_output.put(frame)
 
-            except Empty:
-                continue
             except Exception as e:
                 print(f"⚠️ Processing Error: {e}")
 
-    # ================= ASYNC STREAM GENERATOR =================
+    # ================= MJPEG STREAM ===========================================
     async def generate_frames(self):
-        """
-        Async generator for MJPEG streaming.
-        - JPEG encoding is offloaded to a thread-pool executor so it never
-          blocks the uvicorn event loop (which would stall OTHER requests).
-        - asyncio.sleep(0) yields control between frames so the GPU worker
-          thread can schedule work without being starved.
-        """
         loop = asyncio.get_event_loop()
         while True:
-            try:
-                # Non-blocking peek; if empty, yield control and retry
-                if self.output_queue.empty():
+            frame = self.latest_output.get_nowait()
+            if frame is None:
+                await asyncio.sleep(0.005)
+                continue
+
+            jpeg_bytes = await loop.run_in_executor(
+                _encode_executor, _encode_frame, frame, 75
+            )
+            if jpeg_bytes is None:
+                continue
+
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n"
+                + jpeg_bytes
+                + b"\r\n"
+            )
+
+            await asyncio.sleep(0)
+
+    # ================= WEBSOCKET STREAM =======================================
+    async def _ws_sender(self, websocket: WebSocket):
+        loop = asyncio.get_event_loop()
+        try:
+            while True:
+                frame = self.latest_output.get_nowait()
+                if frame is None:
                     await asyncio.sleep(0.005)
                     continue
 
-                frame = self.output_queue.get_nowait()
-
-                # Encode in thread pool — frees the event loop during CPU work
                 jpeg_bytes = await loop.run_in_executor(
-                    _encode_executor, _encode_frame, frame, 80
+                    _encode_executor, _encode_frame, frame, 75
                 )
-                if jpeg_bytes is None:
-                    continue
+                if jpeg_bytes:
+                    await websocket.send_bytes(jpeg_bytes)
 
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n"
-                    + jpeg_bytes
-                    + b"\r\n"
-                )
+                await asyncio.sleep(1 / 30)
 
-                # Yield control so uvicorn can handle other coroutines
-                await asyncio.sleep(0)
-
-            except Empty:
-                await asyncio.sleep(0.005)
-            except Exception as e:
-                print(f"⚠️ Stream error: {e}")
-                await asyncio.sleep(0.01)
+        except (WebSocketDisconnect, Exception):
+            pass
+        finally:
+            with self._ws_lock:
+                if websocket in self._ws_clients:
+                    self._ws_clients.remove(websocket)
 
     # ================= ROUTES =================
     def setup_routes(self):
@@ -235,16 +395,49 @@ class LiveStreamServer:
                 media_type="multipart/x-mixed-replace; boundary=frame",
             )
 
+        @self.app.websocket("/ws")
+        async def websocket_stream(websocket: WebSocket):
+            await websocket.accept()
+            with self._ws_lock:
+                self._ws_clients.append(websocket)
+            await self._ws_sender(websocket)
+
+        # ── NEW: NMN diagnostic endpoint ──────────────────────────────────
+        @self.app.get("/nmn_status")
+        async def nmn_status():
+            """
+            Returns whether NMN is active, current graph layout, and
+            per-module inference timing from the last processed frame.
+            Useful for debugging and performance tuning.
+            """
+            return JSONResponse({
+                "nmn_active":   self._nmn_active,
+                "graph":        self.nmn.get_graph_info(),
+                "timing_ms":    self.nmn.get_timing(),
+            })
+
         @self.app.post("/set_pipeline")
         async def set_pipeline(request: Request):
-            data        = await request.json()
-            camera_id   = data.get("camera_id", "default")
+            data         = await request.json()
+            camera_id    = data.get("camera_id", "default")
             new_pipeline = data.get("pipeline", [])
             print(f"📢 PIPELINE UPDATED: {new_pipeline} for {camera_id}")
 
             self.camera_pipelines[camera_id] = new_pipeline
             if camera_id == self.current_camera_id:
                 self.pipeline = new_pipeline
+
+                # ── Decide whether this pipeline goes through NMN ──────────
+                if _pipeline_uses_nmn(new_pipeline):
+                    # Build the NMN execution graph for this specific combination.
+                    # set_modules() is cheap (topological sort only) and is called
+                    # HERE, not in the per-frame process loop.
+                    self.nmn.set_modules(new_pipeline)
+                    self._nmn_active = True
+                    print(f"🧩 NMN activated for pipeline: {new_pipeline}")
+                    print(f"   Graph: {self.nmn.get_graph_info()}")
+                else:
+                    self._nmn_active = False
 
                 if "Parking Management" in new_pipeline:
                     def setup():
@@ -253,7 +446,11 @@ class LiveStreamServer:
                         self.running = True
                     threading.Thread(target=setup, daemon=True).start()
 
-            return {"status": "ok", "camera_id": camera_id}
+            return {
+                "status":     "ok",
+                "camera_id":  camera_id,
+                "nmn_active": self._nmn_active,
+            }
 
         @self.app.post("/set_camera")
         async def set_camera(request: Request):
@@ -267,10 +464,10 @@ class LiveStreamServer:
             self.running = False
             await asyncio.sleep(0.5)
 
-            self.camera_sources[camera_id]  = new_url
-            self.current_camera_id          = camera_id
-            self.camera_source              = new_url
-            self.pipeline                   = self.camera_pipelines.get(camera_id, [])
+            self.camera_sources[camera_id] = new_url
+            self.current_camera_id         = camera_id
+            self.camera_source             = new_url
+            self.pipeline                  = self.camera_pipelines.get(camera_id, [])
 
             self.running = True
             return {"status": "camera switched", "camera_id": camera_id}
@@ -305,45 +502,41 @@ class LiveStreamServer:
 
             return JSONResponse({"status": "success", "saved": saved_files}, status_code=200)
 
-        # ================= SECURITY ENDPOINTS =================
         @self.app.get("/security_results")
         async def security_results():
-            """Get current security monitoring results and alerts."""
             return JSONResponse(self.security.get_results())
 
         @self.app.get("/reset_security")
         async def reset_security():
-            """Reset security system alerts and logs."""
             self.security.reset()
             return {"status": "security reset done"}
 
         @self.app.post("/security_config")
         async def security_config(request: Request):
-            """Configure security system parameters."""
-            data = await request.json()
-            threshold = data.get("confidence_threshold", self.security.confidence_threshold)
-            enable_alerts = data.get("enable_email_alerts", self.security.enable_email_alerts)
-            
+            data          = await request.json()
+            threshold     = data.get("confidence_threshold", self.security.confidence_threshold)
+            enable_alerts = data.get("enable_email_alerts",  self.security.enable_email_alerts)
+
             self.security.confidence_threshold = threshold
-            self.security.enable_email_alerts = enable_alerts
-            
+            self.security.enable_email_alerts  = enable_alerts
+
             return {
-                "status": "ok",
+                "status":               "ok",
                 "confidence_threshold": threshold,
-                "enable_email_alerts": enable_alerts
+                "enable_email_alerts":  enable_alerts,
             }
 
     def run(self):
         print("🚀 ModuVision Server Running at http://0.0.0.0:5000")
+        print("   MJPEG      → http://0.0.0.0:5000/video")
+        print("   WS         → ws://0.0.0.0:5000/ws")
+        print("   NMN status → http://0.0.0.0:5000/nmn_status")
         uvicorn.run(
             self.app,
             host="0.0.0.0",
             port=5000,
-            workers=1,          # must be 1 — GPU state lives in this process
+            workers=1,
             log_level="warning",
-            # NOTE: loop="uvloop" was removed — uvloop is Linux/macOS only.
-            # On Windows, uvicorn uses the default asyncio ProactorEventLoop which
-            # is fully async and works correctly. No performance loss on Windows.
         )
 
 
