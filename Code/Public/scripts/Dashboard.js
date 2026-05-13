@@ -578,7 +578,8 @@ async function uploadProject() {
         pipeline[0] === "Security" ||
         pipeline[0] === "Parking Management" ||
         pipeline[0] === "Heatmap" ||
-        pipeline[0] === "Color Detection"
+        pipeline[0] === "Color Detection" ||
+        pipeline[0] === "Fire & Smoke Detection"
       );
 
     const isValid = isAllowedSingle || isAllowedCombo;

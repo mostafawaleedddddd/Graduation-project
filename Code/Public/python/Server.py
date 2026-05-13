@@ -23,7 +23,7 @@ from security import SecuritySystem
 from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
-
+from fire_detection import FireSmokeDetector
 # ── NEW: Dynamic NMN ─────────────────────────────────────────────────────────
 from NMN import (
     DynamicNMN,
@@ -76,19 +76,16 @@ SKIP_N       = 2
 # ─── NMN is active when this set of module names is the pipeline ─────────────
 #     Extend this set to test additional combinations in the future.
 NMN_TRIGGER_SETS = [
-    {"Attendance", "Tracking"},           # ← active test case (user request)
-    {"Security",   "Tracking"},           # ← ready for future test
-    {"Heatmap",    "Tracking"},           # ← ready for future test
+    {"Attendance", "Tracking"},           
+    {"Security",   "Tracking"},           
+    {"Heatmap",    "Tracking"},           
     {"Attendance", "Security", "Tracking"},
+    
 ]
 
 
 def _pipeline_uses_nmn(pipeline: list) -> bool:
-    """
-    Returns True when the active pipeline is a superset of any NMN trigger set.
-    Example: pipeline = ["Tracking", "Attendance", "Color Detection"]
-             → True  (contains {"Attendance", "Tracking"})
-    """
+    
     pipeline_set = set(pipeline)
     return any(trigger <= pipeline_set for trigger in NMN_TRIGGER_SETS)
 
@@ -120,7 +117,7 @@ class LiveStreamServer:
         self.parking_model      = ParkingManagementBlock()
         self.heatmap            = HeatmapBlock()
         self.shelf_orchestrator = ShelfOrchestrator()
-
+        self.fire_smoke_detector = FireSmokeDetector()
         # ================= 2. DYNAMIC NMN SETUP =================
         # Models are injected ONCE here — NMN never loads them again.
         # raw_process_fn wraps each model's existing .process() signature.
@@ -330,6 +327,9 @@ class LiveStreamServer:
 
                     elif step == "Heatmap":
                         frame = self.heatmap.process(frame)
+                    elif step == "Fire & Smoke Detection":
+                        frame = self.fire_smoke_detector.process(frame)
+                    
 
                 self.latest_output.put(frame)
 
