@@ -125,9 +125,7 @@ body::before {
   transition: box-shadow 0.3s;
 }
 
-.navbar-logo:hover {
-  box-shadow: var(--glow-blue);
-}
+.navbar-logo:hover { box-shadow: var(--glow-blue); }
 
 .navbar-logo img {
   width: 100%;
@@ -137,9 +135,7 @@ body::before {
   transition: transform 0.3s ease;
 }
 
-.navbar-logo:hover img {
-  transform: scale(1.35);
-}
+.navbar-logo:hover img { transform: scale(1.35); }
 
 .logout-btn {
   background: rgba(255, 70, 70, 0.15);
@@ -236,9 +232,7 @@ body::before {
   box-shadow: 0 6px 18px rgba(0, 198, 255, 0.2);
 }
 
-.functionality:active {
-  cursor: grabbing;
-}
+.functionality:active { cursor: grabbing; }
 
 /* ─── CANVAS AREA ─── */
 .canvas-wrapper {
@@ -470,7 +464,7 @@ svg {
 
 @keyframes livePulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 8px #4ade80; }
-  50% { opacity: 0.4; box-shadow: 0 0 4px #4ade80; }
+  50%       { opacity: 0.4; box-shadow: 0 0 4px #4ade80; }
 }
 
 .live-feed-buttons {
@@ -518,9 +512,7 @@ svg {
   z-index: 40;
 }
 
-.camera-dropdown-menu.show {
-  display: block;
-}
+.camera-dropdown-menu.show { display: block; }
 
 .camera-dropdown-item {
   display: flex;
@@ -528,9 +520,7 @@ svg {
   gap: 6px;
 }
 
-.camera-dropdown-item + .camera-dropdown-item {
-  margin-top: 6px;
-}
+.camera-dropdown-item + .camera-dropdown-item { margin-top: 6px; }
 
 .camera-dropdown-select {
   flex: 1;
@@ -559,9 +549,7 @@ svg {
   font-size: 0.8rem;
 }
 
-.camera-delete-btn {
-  flex-shrink: 0;
-}
+.camera-delete-btn { flex-shrink: 0; }
 
 .live-feed-btn {
   background: linear-gradient(135deg, var(--blue2), var(--purple2));
@@ -604,13 +592,9 @@ svg {
   box-shadow: 0 0 10px rgba(0, 198, 255, 0.2);
 }
 
-.live-feed-select:hover {
-  transform: translateY(-1px);
-}
+.live-feed-select:hover { transform: translateY(-1px); }
 
-.camera-select-native {
-  display: none;
-}
+.camera-select-native { display: none; }
 
 .live-feed-content {
   flex: 1;
@@ -635,9 +619,7 @@ svg {
   display: none;
 }
 
-#live-feed.is-active {
-  display: block;
-}
+#live-feed.is-active { display: block; }
 
 .live-feed-placeholder {
   position: absolute;
@@ -654,9 +636,7 @@ svg {
     linear-gradient(180deg, rgba(0, 198, 255, 0.02), rgba(255, 0, 204, 0.02));
 }
 
-.live-feed-placeholder.show {
-  display: flex;
-}
+.live-feed-placeholder.show { display: flex; }
 
 .live-feed-placeholder-title {
   font-family: 'Orbitron', monospace;
@@ -675,26 +655,14 @@ svg {
 
 @media (max-width: 720px) {
   .live-feed-panel {
-    right: 10px;
-    bottom: 10px;
+    right: 10px; bottom: 10px;
     width: calc(100vw - 20px);
     min-height: 300px;
   }
-
-  .live-feed-title {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .live-feed-buttons {
-    margin-left: 0;
-    justify-content: stretch;
-  }
-
+  .live-feed-title { flex-direction: column; align-items: stretch; }
+  .live-feed-buttons { margin-left: 0; justify-content: stretch; }
   .live-feed-btn,
-  .camera-dropdown-wrapper {
-    flex: 1 1 calc(50% - 8px);
-  }
+  .camera-dropdown-wrapper { flex: 1 1 calc(50% - 8px); }
 }
 
 /* ─── PROJECT SELECT ─── */
@@ -757,9 +725,7 @@ svg {
   transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.modal-overlay.show .modal-content {
-  transform: scale(1);
-}
+.modal-overlay.show .modal-content { transform: scale(1); }
 
 .modal-content h3 {
   font-family: 'Orbitron', monospace;
@@ -790,9 +756,7 @@ svg {
 }
 
 /* ─── INPUTS ─── */
-.input-group {
-  margin-bottom: 14px;
-}
+.input-group { margin-bottom: 14px; }
 
 .input-group input {
   width: 100%;
@@ -807,9 +771,7 @@ svg {
   transition: border-color 0.3s, box-shadow 0.3s;
 }
 
-.input-group input::placeholder {
-  color: var(--text-dim);
-}
+.input-group input::placeholder { color: var(--text-dim); }
 
 .input-group input:focus {
   outline: none;
@@ -849,6 +811,13 @@ svg {
   transform: translateY(-2px);
 }
 
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .btn-secondary {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-dim);
@@ -874,17 +843,9 @@ svg {
 }
 
 .modal-scroll-area::-webkit-scrollbar { width: 4px; }
-.modal-scroll-area::-webkit-scrollbar-track {
-  background: rgba(0, 198, 255, 0.04);
-  border-radius: 4px;
-}
-.modal-scroll-area::-webkit-scrollbar-thumb {
-  background: rgba(0, 198, 255, 0.25);
-  border-radius: 4px;
-}
-.modal-scroll-area::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 198, 255, 0.45);
-}
+.modal-scroll-area::-webkit-scrollbar-track { background: rgba(0, 198, 255, 0.04); border-radius: 4px; }
+.modal-scroll-area::-webkit-scrollbar-thumb { background: rgba(0, 198, 255, 0.25); border-radius: 4px; }
+.modal-scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(0, 198, 255, 0.45); }
 
 /* ─── ATTENDANCE LIST ─── */
 .attendance-list {
@@ -903,9 +864,7 @@ svg {
   transition: border-color 0.2s;
 }
 
-.attendance-item:hover {
-  border-color: rgba(0, 198, 255, 0.28);
-}
+.attendance-item:hover { border-color: rgba(0, 198, 255, 0.28); }
 
 .attendance-name {
   font-weight: 700;
@@ -919,4 +878,518 @@ svg {
   font-family: 'Orbitron', monospace;
   font-size: 0.7rem;
   letter-spacing: 0.5px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   ATTENDANCE CLASS DROPDOWN  (floating panel next to block)
+═══════════════════════════════════════════════════════════════ */
+.att-class-dropdown {
+  position: absolute;
+  min-width: 220px;
+  background: rgba(4, 11, 28, 0.97);
+  border: 1px solid rgba(0, 198, 255, 0.3);
+  border-radius: 12px;
+  padding: 8px;
+  z-index: 200;
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(0, 198, 255, 0.06) inset,
+    0 0 30px rgba(0, 198, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  animation: attDropIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes attDropIn {
+  from { opacity: 0; transform: scale(0.88) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+/* Subtle top accent line */
+.att-class-dropdown::before {
+  content: '';
+  display: block;
+  height: 2px;
+  background: linear-gradient(90deg, var(--blue1), var(--purple1));
+  margin: -8px -8px 6px -8px;
+  border-radius: 12px 12px 0 0;
+}
+
+/* ── Add Class button ── */
+.att-class-dropdown-add {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(0, 114, 255, 0.14), rgba(142, 45, 226, 0.14));
+  border: 1px dashed rgba(0, 198, 255, 0.4);
+  border-radius: 8px;
+  color: var(--blue1);
+  padding: 10px 14px;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.22s ease;
+}
+
+.att-class-dropdown-add::before {
+  content: '＋';
+  font-size: 0.9rem;
+  font-family: system-ui, sans-serif;
+  line-height: 1;
+  color: var(--blue1);
+}
+
+.att-class-dropdown-add:hover {
+  background: linear-gradient(135deg, rgba(0, 114, 255, 0.26), rgba(142, 45, 226, 0.26));
+  border-color: var(--blue1);
+  box-shadow: 0 0 14px rgba(0, 198, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+/* ── Divider between add button and class list ── */
+.att-class-dropdown-divider {
+  height: 1px;
+  background: rgba(0, 198, 255, 0.1);
+  margin: 2px 0;
+}
+
+/* ── Existing class row ── */
+.att-class-dropdown-item {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 198, 255, 0.08);
+  background: rgba(0, 198, 255, 0.03);
+  overflow: hidden;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.att-class-dropdown-item:hover {
+  background: rgba(0, 198, 255, 0.09);
+  border-color: rgba(0, 198, 255, 0.25);
+}
+
+/* ── Class name: click to activate ── */
+.att-class-dropdown-name {
+  flex: 1;
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.2s;
+}
+
+.att-class-dropdown-item:hover .att-class-dropdown-name {
+  color: var(--blue1);
+}
+
+.att-class-dropdown-count {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  padding: 0 8px 0 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── (+) Add photos button ── */
+.att-class-add-photos-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: rgba(0, 198, 255, 0.08);
+  border: none;
+  border-left: 1px solid rgba(0, 198, 255, 0.18);
+  color: rgba(0, 198, 255, 0.7);
+  cursor: pointer;
+  font-size: 16px;
+  font-family: system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  align-self: stretch;
+  /* No border-radius here — sits between name and delete btn */
+}
+
+.att-class-add-photos-btn:hover {
+  background: rgba(0, 198, 255, 0.2);
+  color: var(--blue1);
+  border-left-color: rgba(0, 198, 255, 0.4);
+}
+
+/* ── (×) Delete button ── */
+.att-class-dropdown-del {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: rgba(255, 70, 70, 0.08);
+  border: none;
+  border-left: 1px solid rgba(255, 70, 70, 0.18);
+  color: rgba(255, 107, 107, 0.65);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  align-self: stretch;
+  border-radius: 0 7px 7px 0;
+}
+
+.att-class-dropdown-del:hover {
+  background: rgba(255, 70, 70, 0.22);
+  color: #ff6b6b;
+  border-left-color: rgba(255, 70, 70, 0.4);
+}
+
+.att-class-dropdown-empty {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 10px 12px;
+  font-family: 'Rajdhani', sans-serif;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* ─── Loading shimmer inside dropdown ─── */
+.att-class-dropdown-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 0;
+}
+
+.att-class-dropdown-skeleton {
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(90deg,
+    rgba(0, 198, 255, 0.05) 25%,
+    rgba(0, 198, 255, 0.1) 50%,
+    rgba(0, 198, 255, 0.05) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   ATTENDANCE CLASS MODAL
+═══════════════════════════════════════════════════════════════ */
+.attendance-class-modal-content {
+  max-width: 500px;
+  width: 94%;
+  padding: 36px 32px 28px;
+}
+
+/* Modal heading row */
+.att-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.att-modal-header h3 {
+  margin: 0;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--blue1);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.att-modal-badge {
+  margin-left: auto;
+  background: rgba(0, 198, 255, 0.1);
+  border: 1px solid rgba(0, 198, 255, 0.25);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.55rem;
+  color: var(--blue1);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── Field labels ── */
+.att-label {
+  display: block;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--blue1);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.att-label-hint {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  margin-left: 5px;
+}
+
+/* ── Class name input (override default) ── */
+#attendanceClassName {
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(2, 8, 23, 0.65);
+  color: var(--text);
+  border: 1px solid rgba(0, 198, 255, 0.22);
+  border-radius: 10px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  outline: none;
+}
+
+#attendanceClassName::placeholder { color: var(--text-dim); }
+
+#attendanceClassName:focus {
+  border-color: var(--blue1);
+  box-shadow: 0 0 0 3px rgba(0, 198, 255, 0.1), 0 0 16px rgba(0, 198, 255, 0.15);
+}
+
+#attendanceClassName:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Upload Zone ── */
+.att-upload-zone {
+  width: 100%;
+  min-height: 110px;
+  border: 2px dashed rgba(0, 198, 255, 0.25);
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  background: rgba(0, 198, 255, 0.025);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle corner glow */
+.att-upload-zone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 100%, rgba(0, 198, 255, 0.05), transparent 70%);
+  pointer-events: none;
+}
+
+.att-upload-zone:hover {
+  border-color: var(--blue1);
+  background: rgba(0, 198, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(0, 198, 255, 0.08), 0 0 24px rgba(0, 198, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.att-upload-zone-drag {
+  border-color: var(--purple1) !important;
+  background: rgba(255, 0, 204, 0.06) !important;
+  box-shadow: 0 0 0 3px rgba(255, 0, 204, 0.1), 0 0 24px rgba(255, 0, 204, 0.12) !important;
+}
+
+.att-upload-icon {
+  font-size: 2rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(0, 198, 255, 0.4));
+  transition: transform 0.25s ease;
+}
+
+.att-upload-zone:hover .att-upload-icon { transform: scale(1.15) translateY(-2px); }
+
+.att-upload-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+}
+
+.att-upload-hint {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.72rem;
+  color: rgba(232, 244, 255, 0.28);
+  letter-spacing: 0.2px;
+}
+
+/* ── Image preview grid ── */
+.att-image-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  max-height: 170px;
+  overflow-y: auto;
+  padding: 2px 2px 2px 0;
+}
+
+.att-image-preview::-webkit-scrollbar { width: 4px; }
+.att-image-preview::-webkit-scrollbar-track { background: rgba(0, 198, 255, 0.04); border-radius: 4px; }
+.att-image-preview::-webkit-scrollbar-thumb { background: rgba(0, 198, 255, 0.22); border-radius: 4px; }
+.att-image-preview::-webkit-scrollbar-thumb:hover { background: rgba(0, 198, 255, 0.4); }
+
+/* ── Thumbnail card ── */
+.att-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 198, 255, 0.18);
+  background: rgba(2, 8, 23, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  cursor: default;
+}
+
+.att-thumb:hover {
+  border-color: rgba(0, 198, 255, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 198, 255, 0.15);
+  transform: scale(1.03);
+  z-index: 2;
+}
+
+.att-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Saved (no local preview) thumb */
+.att-thumb-saved {
+  background: rgba(0, 198, 255, 0.05);
+  border-color: rgba(0, 198, 255, 0.12);
+}
+
+.att-thumb-icon {
+  font-size: 1.5rem;
+  filter: drop-shadow(0 0 6px rgba(0, 198, 255, 0.3));
+}
+
+.att-thumb-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 0 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  line-height: 1.2;
+}
+
+/* Remove button (new images only) */
+.att-thumb-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  background: rgba(2, 8, 23, 0.85);
+  border: 1px solid rgba(255, 70, 70, 0.55);
+  border-radius: 5px;
+  color: #ff6b6b;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s;
+  padding: 0;
+  line-height: 1;
+  opacity: 0;
+}
+
+.att-thumb:hover .att-thumb-remove { opacity: 1; }
+
+.att-thumb-remove:hover {
+  background: rgba(255, 70, 70, 0.35);
+  border-color: #ff6b6b;
+  box-shadow: 0 0 6px rgba(255, 70, 70, 0.35);
+  transform: scale(1.1);
+}
+
+/* File-count badge below zone */
+.att-file-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--blue1);
+  opacity: 0.8;
+}
+
+/* ── Error message ── */
+.att-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 70, 70, 0.08);
+  border: 1px solid rgba(255, 70, 70, 0.28);
+  border-left: 3px solid #ff6b6b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #ff8a8a;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 10px;
+  animation: errShake 0.3s ease;
+}
+
+.att-error::before {
+  content: '⚠';
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+@keyframes errShake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
 }

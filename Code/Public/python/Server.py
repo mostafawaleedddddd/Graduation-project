@@ -481,26 +481,57 @@ class LiveStreamServer:
             self.attendance.reset()
             return {"status": "reset done"}
 
+        @self.app.post("/set_attendance_class")
+        async def set_attendance_class(request: Request):
+            """
+            Switch the attendance recognition dataset to a specific class folder.
+
+            Body (JSON):
+              { "class_name": "class1" }   → scan attendance_images/class1/
+              { "class_name": null }        → revert to base attendance_images/
+
+            The face database is rebuilt immediately on the GPU so the live
+            camera feed starts recognising the new set of students right away.
+            """
+            data       = await request.json()
+            class_name = data.get("class_name") or None   # empty string → None
+
+            self.attendance.set_class(class_name)
+
+            return {
+                "status":     "ok",
+                "class_name": class_name or "DEFAULT",
+                "persons":    len(self.attendance.person_embeddings),
+                "path":       self.attendance.dataset_path,
+            }
+
         @self.app.post("/upload_attendance_images")
         async def upload_images(images: list[UploadFile] = File(...)):
             if not images:
                 return JSONResponse({"message": "No files received"}, status_code=400)
 
-            saved_files = []
-            os.makedirs("attendance_images", exist_ok=True)
+            # Always save into whichever path is currently active
+            # (base path when no class selected, class subfolder when one is active)
+            save_dir = self.attendance.dataset_path
+            os.makedirs(save_dir, exist_ok=True)
 
+            saved_files = []
             for file in images:
                 if not file.filename:
                     continue
                 name     = os.path.splitext(file.filename)[0]
-                filepath = os.path.join("attendance_images", file.filename)
+                filepath = os.path.join(save_dir, file.filename)
                 contents = await file.read()
                 with open(filepath, "wb") as f:
                     f.write(contents)
                 saved_files.append(filepath)
                 self.attendance.add_image(filepath, name)
 
-            return JSONResponse({"status": "success", "saved": saved_files}, status_code=200)
+            return JSONResponse({
+                "status":   "success",
+                "saved":    saved_files,
+                "saved_to": save_dir,
+            }, status_code=200)
 
         @self.app.get("/security_results")
         async def security_results():

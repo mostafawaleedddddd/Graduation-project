@@ -6,6 +6,7 @@
     "express-session": "^1.19.0",
     "mongodb": "^7.0.0",
     "mongoose": "^9.1.5",
-    "mongose": "^0.0.2-security"
+    "mongose": "^0.0.2-security",
+    "multer": "^2.1.1"
   }
 }

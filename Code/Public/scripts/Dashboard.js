@@ -112,9 +112,9 @@ async function addCamera() {
 
   if (!isValidFormat) {
     openInfoModal(
-        "Invalid Format", 
-        `<p style='color: #ff6b6b; margin-bottom: 8px;'>Invalid camera URL format.</p>
-         <p style='font-size: 13px; color: #aaa;'>Must start with <b>rtsp://</b>, <b>http://</b>, or <b>https://</b></p>`
+      "Invalid Format",
+      `<p style='color: #ff6b6b; margin-bottom: 8px;'>Invalid camera URL format.</p>
+       <p style='font-size: 13px; color: #aaa;'>Must start with <b>rtsp://</b>, <b>http://</b>, or <b>https://</b></p>`
     );
     return;
   }
@@ -208,22 +208,15 @@ function startCamera() {
 }
 
 async function activateParkingMode() {
-  await fetch("http://127.0.0.1:5000/init_parking", {
-    method: "POST"
-  });
-
+  await fetch("http://127.0.0.1:5000/init_parking", { method: "POST" });
   alert("Draw parking areas in the opened window, then press ESC");
-
   await fetch("http://127.0.0.1:5000/set_pipeline", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      pipeline: ["Parking Management"]
-    })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pipeline: ["Parking Management"] })
   });
 }
+
 /* ================= CANVAS SYSTEM ================= */
 const canvas = document.getElementById('canvas');
 const svg = document.getElementById('connectionSvg');
@@ -267,7 +260,7 @@ function createBlock(type, x, y) {
   if (type === "Attendance") {
     extraButtons = `
       <button class="list-btn">List</button>
-      <button class="images-btn">Images</button>
+      <button class="images-btn">Classes</button>
     `;
   }
 
@@ -300,7 +293,7 @@ function createBlock(type, x, y) {
 
   if (type === "Attendance") {
     block.querySelector('.list-btn').onclick = () => showAttendanceList();
-    block.querySelector('.images-btn').onclick = () => uploadAttendanceImages();
+    block.querySelector('.images-btn').onclick = () => openAttendanceClassesDropdown(id);
   }
 
   makeBlockDraggable(id);
@@ -310,8 +303,8 @@ function createBlock(type, x, y) {
 
 /* ================= BLOCK DRAGGING ================= */
 let offsetX, offsetY;
-let cachedCanvasRect = null; 
-let rafPending = false;      
+let cachedCanvasRect = null;
+let rafPending = false;
 
 function makeBlockDraggable(id) {
   const el = document.getElementById(id);
@@ -340,7 +333,7 @@ document.addEventListener('mousemove', e => {
   if (!b) return;
 
   b.element.style.left = `${x}px`;
-  b.element.style.top  = `${y}px`;
+  b.element.style.top = `${y}px`;
   b.x = x;
   b.y = y;
 
@@ -454,7 +447,6 @@ function deleteBlock(id) {
   }
   drawConnections();
   updateLiveFeed('Block removed');
-
   updateBackendPipeline();
 }
 
@@ -497,48 +489,49 @@ const saveModal = document.getElementById('saveProjectModal');
 const projectNameInput = document.getElementById('projectNameInput');
 
 function closeSaveModal() {
-    saveModal.classList.remove('show');
-    projectNameInput.value = ''; 
+  saveModal.classList.remove('show');
+  projectNameInput.value = '';
 }
+
 function saveProject() {
-    const pipeline = Array.from(blocks.values()).map(b => b.type);
-    
-    if (pipeline.length === 0) { 
-        openInfoModal("Warning", "<p style='color: #ffbd2e;'>Cannot save an empty project.</p>"); 
-        return; 
-    }
-    saveModal.classList.add('show');
-    projectNameInput.focus(); 
+  const pipeline = Array.from(blocks.values()).map(b => b.type);
+  if (pipeline.length === 0) {
+    openInfoModal("Warning", "<p style='color: #ffbd2e;'>Cannot save an empty project.</p>");
+    return;
+  }
+  saveModal.classList.add('show');
+  projectNameInput.focus();
 }
+
 function confirmSaveProject() {
-    const name = projectNameInput.value.trim();
-    
-    if (!name) {
-        openInfoModal("Input Required", "<p>Please enter a valid project name.</p>");
-        return;
-    }
-    const pipeline = Array.from(blocks.values()).map(b => b.type);
-    closeSaveModal(); 
-    fetch('/user/projectsCreate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ name, pipeline })
-    })
+  const name = projectNameInput.value.trim();
+
+  if (!name) {
+    openInfoModal("Input Required", "<p>Please enter a valid project name.</p>");
+    return;
+  }
+  const pipeline = Array.from(blocks.values()).map(b => b.type);
+  closeSaveModal();
+  fetch('/user/projectsCreate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ name, pipeline })
+  })
     .then(res => res.json())
     .then(data => {
-        if (data.success) { 
-            openInfoModal("Success", `<p>Project "<b>${name}</b>" saved successfully.</p>`);
-            const okBtn = document.querySelector('#infoModal .btn-primary');
-            okBtn.setAttribute("onclick", "closeInfoModalAfterSave()");
-            updateLiveFeed(`Project "${name}" saved`);
-        } else {
-            openInfoModal("Save Failed", `<p style='color: #ff6b6b;'>${data.message || "Failed to save project."}</p>`);
-        }
+      if (data.success) {
+        openInfoModal("Success", `<p>Project "<b>${name}</b>" saved successfully.</p>`);
+        const okBtn = document.querySelector('#infoModal .btn-primary');
+        okBtn.setAttribute("onclick", "closeInfoModalAfterSave()");
+        updateLiveFeed(`Project "${name}" saved`);
+      } else {
+        openInfoModal("Save Failed", `<p style='color: #ff6b6b;'>${data.message || "Failed to save project."}</p>`);
+      }
     })
-    .catch(err => { 
-        console.error(err); 
-        openInfoModal("Server Error", "<p style='color: #ff6b6b;'>Server error while saving project.</p>"); 
+    .catch(err => {
+      console.error(err);
+      openInfoModal("Server Error", "<p style='color: #ff6b6b;'>Server error while saving project.</p>");
     });
 }
 
@@ -546,9 +539,7 @@ async function uploadProject() {
   try {
     const pipeline = Array.from(blocks.values()).map(b => b.type);
 
-    if (!ensureCameraSelected()) {
-      return;
-    }
+    if (!ensureCameraSelected()) return;
 
     if (pipeline.length === 0) {
       openInfoModal("Warning", "<p style='color: #ffbd2e;'>Pipeline is empty. Please add blocks first.</p>");
@@ -608,7 +599,6 @@ async function uploadProject() {
     if (!response.ok) throw new Error("Server error");
 
     const data = await response.json();
-
     openInfoModal("Models Applied", `<p>Successfully applied:<br><b>${pipeline.join(" &rarr; ")}</b></p>`);
     updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
     console.log("Backend pipeline:", data);
@@ -619,6 +609,46 @@ async function uploadProject() {
     updateLiveFeed("Backend not running");
   }
 }
+
+function triggerAttendanceUpload() {
+  const input = document.getElementById('attendanceUploadInput');
+  if (!input) return;
+  input.value = null;
+  input.click();
+}
+
+const attendanceUploadInput = document.getElementById('attendanceUploadInput');
+if (attendanceUploadInput) {
+  attendanceUploadInput.addEventListener('change', async () => {
+    const files = Array.from(attendanceUploadInput.files || []).filter(file => file.type.startsWith('image/'));
+    if (files.length === 0) {
+      openInfoModal('Upload Cancelled', '<p>No image selected.</p>');
+      return;
+    }
+
+    const formData = new FormData();
+    files.forEach(file => formData.append('images', file));
+
+    try {
+      const response = await fetch('http://127.0.0.1:5000/upload_attendance_images', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        openInfoModal('Upload Successful', `<p>Uploaded ${files.length} image(s) to attendance dataset.</p>`);
+        updateLiveFeed(`Uploaded ${files.length} attendance image(s)`);
+      } else {
+        openInfoModal('Upload Failed', `<p style='color: #ff6b6b;'>${data.message || 'Failed to upload attendance image(s).'}</p>`);
+      }
+    } catch (err) {
+      console.error(err);
+      openInfoModal('Connection Error', '<p style="color: #ff6b6b;">Unable to reach the attendance server.</p>');
+    }
+  });
+}
+
 /* ================= LOGOUT ================= */
 const logoutBtn = document.getElementById("logoutBtn");
 if (logoutBtn) {
@@ -733,50 +763,51 @@ async function executeCameraDelete(cameraName) {
 }
 
 function deleteSelectedProject() {
-    const select = document.getElementById('projectSelect');
-    if (!select) return;
+  const select = document.getElementById('projectSelect');
+  if (!select) return;
 
-    const projectId = select.value;
-    if (!projectId) {
-        openInfoModal('Delete Project', '<p>Please select a project first.</p>');
-        return;
-    }
+  const projectId = select.value;
+  if (!projectId) {
+    openInfoModal('Delete Project', '<p>Please select a project first.</p>');
+    return;
+  }
 
-    const projectName = select.selectedOptions[0]?.textContent || 'Selected project';
-    openInfoModal('Confirm Delete', `<p>Are you sure you want to delete "<b>${projectName}</b>"? This cannot be undone.</p>`);
-    const okBtn = document.querySelector('#infoModal .btn-primary');
-    okBtn.innerText = "Delete";
-    okBtn.style.backgroundColor = "#ff4d4d"; 
-    
-    okBtn.setAttribute("onclick", `executeProjectDelete('${projectId}', '${projectName}')`);
+  const projectName = select.selectedOptions[0]?.textContent || 'Selected project';
+  openInfoModal('Confirm Delete', `<p>Are you sure you want to delete "<b>${projectName}</b>"? This cannot be undone.</p>`);
+  const okBtn = document.querySelector('#infoModal .btn-primary');
+  okBtn.innerText = "Delete";
+  okBtn.style.backgroundColor = "#ff4d4d";
+  okBtn.setAttribute("onclick", `executeProjectDelete('${projectId}', '${projectName}')`);
 }
+
 async function executeProjectDelete(projectId, projectName) {
-    try {
-        const res = await fetch(`/user/projects/${projectId}`, {
-            method: 'DELETE',
-            credentials: 'include'
-        });
+  try {
+    const res = await fetch(`/user/projects/${projectId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
 
-        const data = await res.json();
-        const okBtn = document.querySelector('#infoModal .btn-primary');
-        okBtn.innerText = "OK";
-        okBtn.style.backgroundColor = ""; 
-        okBtn.setAttribute("onclick", "closeInfoModal()");
+    const data = await res.json();
+    const okBtn = document.querySelector('#infoModal .btn-primary');
+    okBtn.innerText = "OK";
+    okBtn.style.backgroundColor = "";
+    okBtn.setAttribute("onclick", "closeInfoModal()");
 
-        if (!data.success) {
-            openInfoModal('Delete Failed', `<p style='color: #ff6b6b;'>${data.message || 'Failed to delete project.'}</p>`);
-            return;
-        }
-        openInfoModal('Project Deleted', `<p>Project "<b>${projectName}</b>" was deleted successfully.</p>`);
-        
-        const successBtn = document.querySelector('#infoModal .btn-primary');
-        successBtn.setAttribute("onclick", "location.reload()");
-
-    } catch (err) {
-        console.error(err);
-        openInfoModal('Delete Failed', '<p style="color: #ff6b6b;">Unable to delete project. Please try again.</p>');
+    if (!data.success) {
+      openInfoModal('Delete Failed', `<p style='color: #ff6b6b;'>${data.message || 'Failed to delete project.'}</p>`);
+      return;
     }
+    openInfoModal('Project Deleted', `<p>Project "<b>${projectName}</b>" was deleted successfully.</p>`);
+
+    const successBtn = document.querySelector('#infoModal .btn-primary');
+    successBtn.setAttribute("onclick", "location.reload()");
+
+  } catch (err) {
+    console.error(err);
+    openInfoModal('Delete Failed', '<p style="color: #ff6b6b;">Unable to delete project. Please try again.</p>');
+  }
 }
+
 function clearCanvasOnly() {
   blocks.forEach(b => b.element.remove());
   blocks.clear();
@@ -812,102 +843,287 @@ function autoConnectBlocksInOrder(orderedBlockIds) {
   }
   drawConnections();
 }
-// --- Modal Helper Functions ---
+
+/* ─── Modal Helper Functions ─── */
 const infoModal = document.getElementById('infoModal');
 const infoTitle = document.getElementById('infoModalTitle');
 const infoContent = document.getElementById('infoModalContent');
 
 function openInfoModal(title, htmlContent) {
-    infoTitle.innerText = title;
-    infoContent.innerHTML = htmlContent;
-    infoModal.classList.add('show');
+  infoTitle.innerText = title;
+  infoContent.innerHTML = htmlContent;
+  infoModal.classList.add('show');
 }
 
 function closeInfoModal() {
-    infoModal.classList.remove('show');
+  infoModal.classList.remove('show');
 }
+
 function closeInfoModalAfterSave() {
-    infoModal.classList.remove('show');
-    location.reload();
+  infoModal.classList.remove('show');
+  location.reload();
 }
 
-window.addEventListener('click', function(event) {
-    if (event.target === infoModal) {
-        closeInfoModal();
-    }
+window.addEventListener('click', function (event) {
+  if (event.target === infoModal) {
+    closeInfoModal();
+  }
 });
-//-------------------Attendence Buttons-------------------
 
+/* ─── Attendance List ─── */
 async function showAttendanceList() {
-    try {
-        const res = await fetch("http://127.0.0.1:5000/attendance_results");
-        const data = await res.json();
+  try {
+    const res = await fetch("http://127.0.0.1:5000/attendance_results");
+    const data = await res.json();
 
-        if (!Array.isArray(data) || data.length === 0) {
-            openInfoModal("Attendance List", "<p>No attendance records yet.</p>");
-            return;
-        }
-
-        let listHTML = '<div class="attendance-list">';
-        data.forEach(person => {
-            listHTML += `
-                <div class="attendance-item">
-                    <span class="attendance-name">${person.name}</span>
-                    <span class="attendance-time">${person.time}</span>
-                </div>
-            `;
-        });
-        listHTML += '</div>';
-
-        openInfoModal("Attendance List", listHTML);
-
-    } catch (err) {
-        console.error(err);
-        openInfoModal("Error", "<p style='color: #ff6b6b;'>Failed to fetch attendance list.</p>");
+    if (!Array.isArray(data) || data.length === 0) {
+      openInfoModal("Attendance List", "<p>No attendance records yet.</p>");
+      return;
     }
+
+    let listHTML = '<div class="attendance-list">';
+    data.forEach(person => {
+      listHTML += `
+        <div class="attendance-item">
+          <span class="attendance-name">${person.name}</span>
+          <span class="attendance-time">${person.time}</span>
+        </div>
+      `;
+    });
+    listHTML += '</div>';
+
+    openInfoModal("Attendance List", listHTML);
+
+  } catch (err) {
+    console.error(err);
+    openInfoModal("Error", "<p style='color: #ff6b6b;'>Failed to fetch attendance list.</p>");
+  }
 }
 
+/* ═══════════════════════════════════════════════════════
+   ATTENDANCE CLASS MANAGER
+   Activated ONLY when Attendance is the sole block on canvas
+════════════════════════════════════════════════════════ */
 
-function uploadAttendanceImages() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.multiple = true;
-    input.accept = "image/*";
+/* State for the class modal */
+let _attSelectedFiles = [];        // FileList → array of File objects
+let _attPendingBlockId = null;     // which block triggered the modal
 
-    input.onchange = async () => {
-        const files = input.files;
-        const formData = new FormData();
+/* ─── Check if Attendance is standalone ─── */
+function isAttendanceAlone() {
+  const pipeline = Array.from(blocks.values()).map(b => b.type);
+  return pipeline.length === 1 && pipeline[0] === "Attendance";
+}
 
-        for (let file of files) {
-            formData.append("images", file);
-        }
+/* ─── "Classes" button on block ─── */
+function openAttendanceClassesDropdown(blockId) {
+  if (!isAttendanceAlone()) {
+    // When combined in a pipeline — original behaviour
+    uploadAttendanceImages();
+    return;
+  }
+  _attPendingBlockId = blockId;
+  openAttendanceClassDropdownMenu(blockId);
+}
 
-        try {
-            const res = await fetch("http://127.0.0.1:5000/upload_attendance_images", {
-                method: "POST",
-                body: formData
+/* ─── Build & show inline dropdown next to the block ─── */
+let _attDropdownEl = null;
+
+function openAttendanceClassDropdownMenu(blockId) {
+  // Remove any existing dropdown
+  closeAttendanceDropdownMenu();
+
+  const blockEl = document.getElementById(blockId);
+  const blockRect = blockEl.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+
+  const menu = document.createElement('div');
+  menu.id = 'attClassDropdown';
+  menu.className = 'att-class-dropdown';
+  menu.style.left = `${blockRect.right - canvasRect.left + 8}px`;
+  menu.style.top  = `${blockRect.top  - canvasRect.top}px`;
+
+  // "+ Add Class" button always at top
+  const addItem = document.createElement('button');
+  addItem.className = 'att-class-dropdown-item att-class-dropdown-add';
+  addItem.innerHTML = '＋ Add Class';
+  addItem.onclick = () => {
+    closeAttendanceDropdownMenu();
+    openAttendanceClassModal();
+  };
+  menu.appendChild(addItem);
+
+  canvas.appendChild(menu);
+  _attDropdownEl = menu;
+
+  // Fetch & render existing classes
+  fetch('/user/attendance/classes', { credentials: 'include' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) return;
+      data.classes.forEach(cls => {
+        const item = document.createElement('div');
+        item.className = 'att-class-dropdown-item att-class-dropdown-existing';
+
+        // ── Class name: clicking activates the class for recognition ──
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'att-class-dropdown-name';
+        nameSpan.textContent = cls.name;
+        nameSpan.title = `Activate ${cls.name} for attendance recognition`;
+        nameSpan.onclick = async () => {
+          closeAttendanceDropdownMenu();
+          try {
+            const res = await fetch('http://127.0.0.1:5000/set_attendance_class', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ class_name: cls.name })
             });
+            const result = await res.json();
+            openInfoModal(
+              '✅ Class Activated',
+              `<p>Recognition is now running for <b>${cls.name}</b>.</p>
+               <p style="color:#aaa;font-size:13px;margin-top:6px;">
+                 ${result.persons ?? 0} student(s) loaded from dataset.
+               </p>`
+            );
+          } catch (err) {
+            console.warn('Could not notify backend of class switch:', err);
+            openInfoModal('⚠️ Backend Unreachable', '<p style="color:#ffbd2e;">Class selected but backend did not respond. Make sure the Python server is running.</p>');
+          }
+        };
 
-            const data = await res.json();
-            console.log("Upload response:", data);
+        // ── (+) button: opens the add-photos modal ──
+        const addPhotosBtn = document.createElement('button');
+        addPhotosBtn.className = 'att-class-add-photos-btn';
+        addPhotosBtn.innerHTML = '＋';
+        addPhotosBtn.title = `Add students to ${cls.name}`;
+        addPhotosBtn.onclick = (e) => {
+          e.stopPropagation();
+          closeAttendanceDropdownMenu();
+          openAttendanceClassModal(cls);
+        };
 
-            if (res.status === 200) {
-                openInfoModal("Success", "<p>Images uploaded successfully.</p>");
-            } else {
-                openInfoModal("Upload Failed", `<p style='color: #ffbd2e;'>${data.message}</p>`);
-            }
+        // ── (×) button: delete class ──
+        const delBtn = document.createElement('button');
+        delBtn.className = 'att-class-dropdown-del';
+        delBtn.innerHTML = '&times;';
+        delBtn.title = `Delete ${cls.name}`;
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          confirmDeleteAttendanceClass(cls._id, cls.name);
+        };
 
-        } catch (err) {
-            console.error(err);
-            openInfoModal("Connection Error", "<p style='color: #ff6b6b;'>Server not reachable.</p>");
-        }
-    };
+        item.appendChild(nameSpan);
+        item.appendChild(addPhotosBtn);
+        item.appendChild(delBtn);
+        menu.appendChild(item);
+      });
 
-    input.click();
+      if (data.classes.length === 0) {
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'att-class-dropdown-empty';
+        emptyEl.textContent = 'No classes yet';
+        menu.appendChild(emptyEl);
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      const errEl = document.createElement('div');
+      errEl.className = 'att-class-dropdown-empty';
+      errEl.textContent = 'Failed to load classes';
+      menu.appendChild(errEl);
+    });
 }
 
+function closeAttendanceDropdownMenu() {
+  if (_attDropdownEl) {
+    _attDropdownEl.remove();
+    _attDropdownEl = null;
+  }
+}
 
+/* ─── Open class modal (new or existing) ─── */
+function openAttendanceClassModal(existingClass = null) {
+  _attSelectedFiles = [];
+  _attEditingClassId = existingClass ? existingClass._id : null;
+
+  const modal = document.getElementById('attendanceClassModal');
+  const nameInput = document.getElementById('attendanceClassName');
+  const preview = document.getElementById('attImagePreview');
+  const errEl = document.getElementById('attClassError');
+  const fileInput = document.getElementById('attImageInput');
+  const btnText = document.getElementById('attSaveBtnText');
+
+  nameInput.value = existingClass ? existingClass.name : '';
+  preview.innerHTML = '';
+  errEl.style.display = 'none';
+  fileInput.value = '';
+
+  if (existingClass) {
+    // Show existing saved images as thumbnails
+    (existingClass.images || []).forEach(img => {
+      const thumb = document.createElement('div');
+      thumb.className = 'att-thumb att-thumb-saved';
+      thumb.innerHTML = `
+        <div class="att-thumb-icon">🖼️</div>
+        <div class="att-thumb-name">${img.originalName}</div>
+      `;
+      preview.appendChild(thumb);
+    });
+    btnText.textContent = 'Add Photos';
+    document.querySelector('#attendanceClassModal h3').textContent = `🪪 ${existingClass.name}`;
+    nameInput.disabled = true;
+    nameInput.style.opacity = '0.5';
+  } else {
+    btnText.textContent = 'Save Class';
+    document.querySelector('#attendanceClassModal h3').textContent = '🪪 Add Attendance Class';
+    nameInput.disabled = false;
+    nameInput.style.opacity = '1';
+  }
+
+  modal.classList.add('show');
+}
+
+let _attEditingClassId = null;
+
+function closeAttendanceClassModal() {
+  const modal = document.getElementById('attendanceClassModal');
+  modal.classList.remove('show');
+  _attSelectedFiles = [];
+  _attEditingClassId = null;
+
+  const nameInput = document.getElementById('attendanceClassName');
+  nameInput.disabled = false;
+  nameInput.style.opacity = '1';
+  document.getElementById('attImagePreview').innerHTML = '';
+  document.getElementById('attClassError').style.display = 'none';
+  document.getElementById('attImageInput').value = '';
+}
+
+/* ─── File input change → preview ─── */
 document.addEventListener('DOMContentLoaded', () => {
+  const fileInput = document.getElementById('attImageInput');
+  if (fileInput) {
+    fileInput.addEventListener('change', () => {
+      _attSelectedFiles = Array.from(fileInput.files);
+      renderAttImagePreview();
+    });
+  }
+
+  // Drag & drop on upload zone
+  const zone = document.getElementById('attUploadZone');
+  if (zone) {
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('att-upload-zone-drag'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('att-upload-zone-drag'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('att-upload-zone-drag');
+      const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      _attSelectedFiles = [..._attSelectedFiles, ...dropped];
+      renderAttImagePreview();
+    });
+  }
+
   showLiveFeedPlaceholder("Camera idle", "Select a camera to start streaming");
   loadProjects();
   const dropdown = document.getElementById('projectSelect');
@@ -921,9 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch('/user/getCameras')
     .then(res => res.json())
     .then(data => {
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to fetch cameras');
-      }
+      if (!data.success) throw new Error(data.message || 'Failed to fetch cameras');
       cameras = Object.entries(data.cameras || {}).map(([name, url]) => ({ name, url }));
       renderCameraDropdown();
     })
@@ -974,25 +1188,205 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+function renderAttImagePreview() {
+  const preview = document.getElementById('attImagePreview');
+  // Keep saved thumbs (those without objectURL data), re-add new ones
+  const savedThumbs = Array.from(preview.querySelectorAll('.att-thumb-saved'));
+  preview.innerHTML = '';
+  savedThumbs.forEach(t => preview.appendChild(t));
 
+  _attSelectedFiles.forEach((file, idx) => {
+    const url = URL.createObjectURL(file);
+    const thumb = document.createElement('div');
+    thumb.className = 'att-thumb att-thumb-new';
+    thumb.innerHTML = `
+      <img src="${url}" alt="${file.name}" class="att-thumb-img">
+      <div class="att-thumb-name">${file.name}</div>
+      <button class="att-thumb-remove" data-idx="${idx}">&times;</button>
+    `;
+    preview.appendChild(thumb);
+  });
+
+  // Remove buttons
+  preview.querySelectorAll('.att-thumb-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      _attSelectedFiles.splice(idx, 1);
+      renderAttImagePreview();
+    });
+  });
+}
+
+/* ─── Save / Add photos ─── */
+async function saveAttendanceClass() {
+  const nameInput = document.getElementById('attendanceClassName');
+  const errEl = document.getElementById('attClassError');
+  const saveBtn = document.getElementById('attSaveBtn');
+  const btnText = document.getElementById('attSaveBtnText');
+
+  errEl.style.display = 'none';
+
+  if (_attEditingClassId) {
+    // Adding photos to existing class
+    if (_attSelectedFiles.length === 0) {
+      showAttError('Please select at least one image to add.');
+      return;
+    }
+    saveBtn.disabled = true;
+    btnText.textContent = 'Uploading...';
+
+    const formData = new FormData();
+    _attSelectedFiles.forEach(f => formData.append('images', f));
+
+    try {
+      const res = await fetch(`/user/attendance/classes/${_attEditingClassId}/images`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showAttError(data.message || 'Failed to upload images.');
+        return;
+      }
+      closeAttendanceClassModal();
+      openInfoModal('Photos Added', `<p>Photos added to class successfully.</p>`);
+    } catch (err) {
+      console.error(err);
+      showAttError('Server error. Please try again.');
+    } finally {
+      saveBtn.disabled = false;
+      btnText.textContent = 'Add Photos';
+    }
+
+  } else {
+    // Creating new class
+    const name = nameInput.value.trim();
+    if (!name) {
+      showAttError('Please enter a class name.');
+      return;
+    }
+    if (_attSelectedFiles.length === 0) {
+      showAttError('Please add at least one student photo.');
+      return;
+    }
+
+    saveBtn.disabled = true;
+    btnText.textContent = 'Saving...';
+
+    const formData = new FormData();
+    formData.append('name', name);
+    _attSelectedFiles.forEach(f => formData.append('images', f));
+
+    try {
+      const res = await fetch('/user/attendance/classes', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showAttError(data.message || 'Failed to create class.');
+        return;
+      }
+      closeAttendanceClassModal();
+      openInfoModal('Class Saved', `<p>Class "<b>${name}</b>" created with ${_attSelectedFiles.length} photo(s).</p>`);
+    } catch (err) {
+      console.error(err);
+      showAttError('Server error. Please try again.');
+    } finally {
+      saveBtn.disabled = false;
+      btnText.textContent = 'Save Class';
+    }
+  }
+}
+
+function showAttError(msg) {
+  const errEl = document.getElementById('attClassError');
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+}
+
+/* ─── Confirm delete class ─── */
+function confirmDeleteAttendanceClass(classId, className) {
+  openInfoModal('Confirm Delete', `<p>Delete class "<b>${className}</b>" and all its photos? This cannot be undone.</p>`);
+  const okBtn = document.querySelector('#infoModal .btn-primary');
+  okBtn.innerText = 'Delete';
+  okBtn.style.backgroundColor = '#ff4d4d';
+  okBtn.removeAttribute('onclick');
+  okBtn.onclick = () => executeDeleteAttendanceClass(classId, className);
+}
+
+async function executeDeleteAttendanceClass(classId, className) {
+  try {
+    const res = await fetch(`/user/attendance/classes/${classId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const data = await res.json();
+
+    const okBtn = document.querySelector('#infoModal .btn-primary');
+    okBtn.innerText = 'OK';
+    okBtn.style.backgroundColor = '';
+    okBtn.onclick = () => closeInfoModal();
+
+    if (!res.ok || !data.success) {
+      openInfoModal('Delete Failed', `<p style='color:#ff6b6b;'>${data.message || 'Could not delete class.'}</p>`);
+      return;
+    }
+    openInfoModal('Class Deleted', `<p>Class "<b>${className}</b>" was deleted.</p>`);
+  } catch (err) {
+    console.error(err);
+    openInfoModal('Delete Failed', `<p style='color:#ff6b6b;'>Server error. Try again.</p>`);
+  }
+}
+
+/* ─── Original image upload (used in pipeline/combo mode) ─── */
+function uploadAttendanceImages() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  input.accept = "image/*";
+
+  input.onchange = async () => {
+    const files = input.files;
+    const formData = new FormData();
+    for (let file of files) formData.append("images", file);
+
+    try {
+      const res = await fetch("http://127.0.0.1:5000/upload_attendance_images", {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (res.status === 200) {
+        openInfoModal("Success", "<p>Images uploaded successfully.</p>");
+      } else {
+        openInfoModal("Upload Failed", `<p style='color: #ffbd2e;'>${data.message}</p>`);
+      }
+    } catch (err) {
+      console.error(err);
+      openInfoModal("Connection Error", "<p style='color: #ff6b6b;'>Server not reachable.</p>");
+    }
+  };
+
+  input.click();
+}
+
+/* ─── Close dropdown on outside click ─── */
 const modal = document.getElementById('cameraModal');
 liveFeedImage.addEventListener("error", () => {
-    showLiveFeedPlaceholder("Stream unavailable", "The selected camera could not be loaded. Check the backend server or camera URL.");
+  showLiveFeedPlaceholder("Stream unavailable", "The selected camera could not be loaded. Check the backend server or camera URL.");
 });
 
 liveFeedImage.addEventListener("load", () => {
-    if (currentCameraId) {
-        showLiveFeedStream(currentCameraId);
-    }
+  if (currentCameraId) showLiveFeedStream(currentCameraId);
 });
 
-window.addEventListener('click', function(event) {
-    if (event.target === modal) {
-        closeAddCamera();
-    }
-
-    if (!event.target.closest('.camera-dropdown-wrapper')) {
-        closeCameraDropdown();
-    }
+window.addEventListener('click', function (event) {
+  if (event.target === modal) closeAddCamera();
+  if (!event.target.closest('.camera-dropdown-wrapper')) closeCameraDropdown();
+  if (_attDropdownEl && !event.target.closest('#attClassDropdown') && !event.target.closest('.images-btn')) {
+    closeAttendanceDropdownMenu();
+  }
 });
-

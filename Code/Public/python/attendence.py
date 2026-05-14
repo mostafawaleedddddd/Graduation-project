@@ -5,11 +5,15 @@ from collections import defaultdict
 from insightface.app import FaceAnalysis
 from datetime import datetime
 
+BASE_DATASET_PATH = r"D:\University_files\Courses\gp\Github\Graduation-project\Code\Public\python\attendance_images"
+
 class AttendanceSystem:
 
-    def __init__(self, dataset_path="attendance_images", threshold=0.30):
+    def __init__(self, dataset_path=None, threshold=0.30):
 
-        self.dataset_path = dataset_path
+        # Use the absolute base path by default; callers can still override via dataset_path
+        self.base_dataset_path = dataset_path if dataset_path else BASE_DATASET_PATH
+        self.dataset_path = self.base_dataset_path
         self.threshold = threshold
 
         # ================= LOAD MODEL ON GPU =================
@@ -28,7 +32,7 @@ class AttendanceSystem:
         self.marked_names = set()
         self.attendance_log = []
 
-        # Ensure the image folder exists to prevent errors
+        # Ensure the base image folder exists to prevent errors
         if not os.path.exists(self.dataset_path):
             os.makedirs(self.dataset_path)
 
@@ -37,31 +41,33 @@ class AttendanceSystem:
 
     # ================= BUILD DATABASE =================
     def _build_database(self):
-        print("📥 Building face database...")
+        print(f"📥 Building face database from: {self.dataset_path}")
 
-        for file in os.listdir(self.dataset_path):
-            img_path = os.path.join(self.dataset_path, file)
+        # Walk recursively so the base path picks up images inside class
+        # subfolders (e.g. attendance_images/class1/alice.jpg), and a class
+        # path picks up only its own images.
+        for root, dirs, files in os.walk(self.dataset_path):
+            for file in files:
+                img_path = os.path.join(root, file)
 
-            # Skip non-image files
-            if not file.lower().endswith((".jpg", ".png", ".jpeg")):
-                continue
+                if not file.lower().endswith((".jpg", ".png", ".jpeg")):
+                    continue
 
-            img = cv2.imread(img_path)
-            if img is None:
-                continue
+                img = cv2.imread(img_path)
+                if img is None:
+                    continue
 
-            # Model processing happens on GPU
-            faces = self.app.get(img)
-            if len(faces) == 0:
-                print(f"⚠️ No face found in {file}")
-                continue
+                faces = self.app.get(img)
+                if len(faces) == 0:
+                    print(f"⚠️ No face found in {file}")
+                    continue
 
-            emb = faces[0].embedding
-            emb = emb / np.linalg.norm(emb)
+                emb = faces[0].embedding
+                emb = emb / np.linalg.norm(emb)
 
-            # Use filename as person name
-            person_name = os.path.splitext(file)[0]
-            self.person_embeddings[person_name].append(emb)
+                # Use filename (without extension) as person name
+                person_name = os.path.splitext(file)[0]
+                self.person_embeddings[person_name].append(emb)
 
         self._update_centroids()
         print("✅ Persons loaded:", len(self.person_embeddings))
@@ -158,3 +164,37 @@ class AttendanceSystem:
     def reset(self):
         self.marked_names.clear()
         self.attendance_log = []
+    # ================= SET CLASS =================
+    def set_class(self, class_name=None):
+        """
+        Switch the recognition dataset to a specific class subfolder.
+
+        - If class_name is None or empty  → revert to the base path
+          (D:\\...\\attendance_images)
+        - If class_name is provided        → use the subfolder
+          (D:\\...\\attendance_images\\<class_name>)
+
+        The face database is rebuilt immediately after switching so that
+        the running camera starts recognising from the new folder right away.
+        """
+        if class_name:
+            new_path = os.path.join(self.base_dataset_path, class_name)
+        else:
+            new_path = self.base_dataset_path
+
+        if not os.path.exists(new_path):
+            os.makedirs(new_path)
+            print(f"📁 Created missing folder: {new_path}")
+
+        self.dataset_path = new_path
+
+        # Clear existing database and rebuild from the new path
+        self.person_embeddings.clear()
+        self.centroids.clear()
+        self.marked_names.clear()
+        self.attendance_log.clear()
+
+        self._build_database()
+        print(f"✅ Attendance class switched → '{class_name or 'DEFAULT (all images)'}'"
+              f"\n   Path: {self.dataset_path}"
+              f"\n   Persons loaded: {len(self.person_embeddings)}")

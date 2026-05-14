@@ -1,6 +1,4 @@
-const  Project  = require('../Models/model');
-console.log(Project);
-
+const { Project } = require('../Models/model');
 
 async function createProject(req, res) {
   try {
@@ -21,7 +19,7 @@ async function createProject(req, res) {
     });
 
     await project.save();
-    
+
     res.status(201).json({
       success: true,
       project
@@ -99,7 +97,7 @@ async function deleteProject(req, res) {
 
     const deleted = await Project.findOneAndDelete({
       _id: projectId,
-      owner: req.session.user._id   // 🔐 FIX
+      owner: req.session.user._id
     });
 
     if (!deleted) {
@@ -113,7 +111,6 @@ async function deleteProject(req, res) {
     res.status(500).json({ success: false, message: 'Failed to delete project' });
   }
 }
-
 
 module.exports = {
   createProject,

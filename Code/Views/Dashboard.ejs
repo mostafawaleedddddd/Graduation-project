@@ -118,6 +118,7 @@
                     <button type="button" class="live-feed-btn" onclick="openAddCamera()">➕ Add</button>
                     <button type="button" class="live-feed-btn" onclick="saveProject()">💾 Save</button>
                     <button type="button" class="live-feed-btn" onclick="uploadProject()">📤 Upload</button>
+                    <input id="attendanceUploadInput" type="file" accept="image/*" style="display:none" multiple>
                 </div>
             </div>
             <div class="live-feed-content">
@@ -160,6 +161,44 @@
             <div class="action-buttons">
                 <button type="button" class="btn-secondary" onclick="closeAddCamera()">Cancel</button>
                 <button type="button" class="btn-primary" onclick="addCamera()">Add Camera</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+         ATTENDANCE CLASS MODAL
+         Only shown when Attendance is solo on canvas
+    ════════════════════════════════════════════════ -->
+    <div id="attendanceClassModal" class="modal-overlay">
+        <div class="modal-content attendance-class-modal-content">
+            <button type="button" class="close-btn" onclick="closeAttendanceClassModal()">&times;</button>
+            <h3>🪪 Add Attendance Class</h3>
+
+            <div class="input-group">
+                <label class="att-label">Class Name</label>
+                <input type="text" id="attendanceClassName" placeholder="e.g. Class A, Grade 5B..." autocomplete="off">
+            </div>
+
+            <div class="input-group">
+                <label class="att-label">Student Photos <span class="att-label-hint">(select multiple)</span></label>
+                <div class="att-upload-zone" id="attUploadZone" onclick="document.getElementById('attImageInput').click()">
+                    <div class="att-upload-icon">📁</div>
+                    <div class="att-upload-text">Click to browse or drag &amp; drop images</div>
+                    <div class="att-upload-hint">JPG, PNG, WEBP — up to 10 MB each</div>
+                </div>
+                <input type="file" id="attImageInput" multiple accept="image/*" style="display:none">
+            </div>
+
+            <!-- Preview thumbnails -->
+            <div id="attImagePreview" class="att-image-preview"></div>
+
+            <div id="attClassError" class="att-error" style="display:none;"></div>
+
+            <div class="action-buttons">
+                <button type="button" class="btn-secondary" onclick="closeAttendanceClassModal()">Cancel</button>
+                <button type="button" class="btn-primary" id="attSaveBtn" onclick="saveAttendanceClass()">
+                    <span id="attSaveBtnText">Save Class</span>
+                </button>
             </div>
         </div>
     </div>
