@@ -11,12 +11,33 @@ const { AttendanceClass } = require('../Models/model');
    when searching for a match during live attendance.
 ════════════════════════════════════════════════════════════ */
 const ATTENDANCE_ROOT = path.resolve(
-  'D:/University_files/Courses/gp/Github/Graduation-project/Code/Public/python/attendance_images'
+  '../Code/Public/python/attendance_images'
 );
 
 /* ─── MULTER STORAGE ─── */
 // Files land in a _tmp folder first; we move them to <className>/ inside the handler
 // because for NEW classes the class name isn't known until the handler runs.
+function sanitizeFileName(name) {
+  return name
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getUniqueFilename(dir, name) {
+  let candidate = name;
+  const ext = path.extname(name);
+  const base = path.basename(name, ext);
+  let count = 1;
+
+  while (fs.existsSync(path.join(dir, candidate))) {
+    candidate = `${base}-${count}${ext}`;
+    count += 1;
+  }
+
+  return candidate;
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const tmp = path.join(ATTENDANCE_ROOT, '_tmp');
@@ -24,8 +45,9 @@ const storage = multer.diskStorage({
     cb(null, tmp);
   },
   filename: (req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
+    const original = sanitizeFileName(path.basename(file.originalname || 'image'));
+    const name = getUniqueFilename(path.join(ATTENDANCE_ROOT, '_tmp'), original);
+    cb(null, name);
   }
 });
 
@@ -236,5 +258,6 @@ module.exports = {
   getClasses,
   getClassById,
   addImagesToClass,
-  deleteClass
+  deleteClass,
+  sanitizeFileName
 };

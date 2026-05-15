@@ -5,7 +5,7 @@ from collections import defaultdict
 from insightface.app import FaceAnalysis
 from datetime import datetime
 
-BASE_DATASET_PATH = r"D:\University_files\Courses\gp\Github\Graduation-project\Code\Public\python\attendance_images"
+BASE_DATASET_PATH = r"attendance_images"
 
 class AttendanceSystem:
 
@@ -42,10 +42,6 @@ class AttendanceSystem:
     # ================= BUILD DATABASE =================
     def _build_database(self):
         print(f"📥 Building face database from: {self.dataset_path}")
-
-        # Walk recursively so the base path picks up images inside class
-        # subfolders (e.g. attendance_images/class1/alice.jpg), and a class
-        # path picks up only its own images.
         for root, dirs, files in os.walk(self.dataset_path):
             for file in files:
                 img_path = os.path.join(root, file)
@@ -65,7 +61,6 @@ class AttendanceSystem:
                 emb = faces[0].embedding
                 emb = emb / np.linalg.norm(emb)
 
-                # Use filename (without extension) as person name
                 person_name = os.path.splitext(file)[0]
                 self.person_embeddings[person_name].append(emb)
 
@@ -166,17 +161,7 @@ class AttendanceSystem:
         self.attendance_log = []
     # ================= SET CLASS =================
     def set_class(self, class_name=None):
-        """
-        Switch the recognition dataset to a specific class subfolder.
-
-        - If class_name is None or empty  → revert to the base path
-          (D:\\...\\attendance_images)
-        - If class_name is provided        → use the subfolder
-          (D:\\...\\attendance_images\\<class_name>)
-
-        The face database is rebuilt immediately after switching so that
-        the running camera starts recognising from the new folder right away.
-        """
+        
         if class_name:
             new_path = os.path.join(self.base_dataset_path, class_name)
         else:
