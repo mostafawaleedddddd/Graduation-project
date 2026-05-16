@@ -85,6 +85,7 @@ function closeAddCamera() {
 }
 
 function showLiveFeedPlaceholder(title, message) {
+  if (currentSplitMode > 1) return; // don't interfere with split mode
   liveFeedPlaceholder.querySelector(".live-feed-placeholder-title").textContent = title;
   liveFeedPlaceholder.querySelector(".live-feed-placeholder-text").textContent = message;
   liveFeedPlaceholder.classList.add("show");
@@ -180,6 +181,8 @@ async function applyCameraSelection(cameraId, url) {
 function ensureCameraSelected() {
   if (currentCameraId) return true;
   if (cameraSelect && cameraSelect.value) return true;
+  // In split mode, consider it valid if at least one panel has a camera
+  if (currentSplitMode > 1 && Object.keys(splitCameras).length > 0) return true;
   openInfoModal("Camera Required", "<p style='color: #ffbd2e;'>Please select a camera before adding models or uploading the pipeline.</p>");
   return false;
 }
@@ -589,25 +592,134 @@ async function uploadProject() {
       return;
     }
 
-    // ================= SEND TO SERVER =================
-    const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pipeline, camera_id: currentCameraId || "default" })
-    });
+    // ================= SPLIT MODE: show camera picker =================
+    if (currentSplitMode > 1 && Object.keys(splitCameras).length > 0) {
+      openSplitUploadModal(pipeline);
+      return;
+    }
 
-    if (!response.ok) throw new Error("Server error");
-
-    const data = await response.json();
-    openInfoModal("Models Applied", `<p>Successfully applied:<br><b>${pipeline.join(" &rarr; ")}</b></p>`);
-    updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
-    console.log("Backend pipeline:", data);
+    // ================= SINGLE MODE: send directly =================
+    await applyPipelineToCamera(pipeline, [currentCameraId || "default"]);
 
   } catch (err) {
     console.error(err);
     openInfoModal("Connection Error", "<p style='color: #ff6b6b;'>Backend is not running or unreachable.</p>");
     updateLiveFeed("Backend not running");
   }
+}
+
+/* ── Apply pipeline to a list of camera IDs ── */
+async function applyPipelineToCamera(pipeline, cameraIds) {
+  try {
+    if (currentSplitMode > 1) {
+      // ── STEP 1: register every selected camera (await each one) ──────────
+      for (const [, data] of Object.entries(splitCameras)) {
+        if (!cameraIds.includes(data.cameraId)) continue;
+        await fetch("http://127.0.0.1:5000/register_camera", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ camera_id: data.cameraId, url: data.url })
+        });
+        console.log(`[split] registered ${data.cameraId}`);
+      }
+
+      // ── STEP 2: set pipeline for each camera (await each one) ────────────
+      for (const camId of cameraIds) {
+        await fetch("http://127.0.0.1:5000/set_pipeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pipeline, camera_id: camId })
+        });
+        console.log(`[split] pipeline set for ${camId}:`, pipeline);
+      }
+
+      // ── STEP 3: let the server open the capture and warm up ──────────────
+      await new Promise(r => setTimeout(r, 800));
+
+      // ── STEP 4: switch each cell to the processed stream ─────────────────
+      splitPipelineActive = true;
+      for (const [idx, data] of Object.entries(splitCameras)) {
+        if (cameraIds.includes(data.cameraId)) {
+          _switchCellToProcessed(parseInt(idx), data.cameraId);
+        }
+      }
+
+    } else {
+      // ── Single mode ───────────────────────────────────────────────────────
+      await fetch("http://127.0.0.1:5000/set_pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipeline, camera_id: cameraIds[0] })
+      });
+    }
+
+    openInfoModal("Models Applied",
+      `<p>Pipeline applied:<br><b>${pipeline.join(" → ")}</b><br>
+       <span style="color:var(--text-dim);font-size:0.85rem;">
+         Cameras: ${cameraIds.join(", ")}
+       </span></p>`);
+    updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
+
+  } catch (err) {
+    console.error("applyPipelineToCamera error:", err);
+    openInfoModal("Connection Error", "<p style='color:#ff6b6b;'>Backend unreachable.</p>");
+  }
+}
+
+/* ── Split upload modal ── */
+let _splitUploadPipeline = [];
+
+function openSplitUploadModal(pipeline) {
+  _splitUploadPipeline = pipeline;
+
+  const list = document.getElementById('splitUploadCameraList');
+  list.innerHTML = '';
+
+  const entries = Object.entries(splitCameras);
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="split-upload-empty">No cameras selected in split view.</div>';
+  } else {
+    entries.forEach(([idx, data]) => {
+      const item = document.createElement('div');
+      item.className = 'split-upload-camera-item selected'; // default all selected
+      item.dataset.cameraId = data.cameraId;
+
+      item.innerHTML = `
+        <div class="split-upload-checkbox">✓</div>
+        <div class="split-upload-cam-info">
+          <span class="split-upload-cam-label">Cam ${parseInt(idx) + 1}</span>
+          <span class="split-upload-cam-name">${data.cameraId}</span>
+        </div>
+      `;
+
+      item.addEventListener('click', () => {
+        item.classList.toggle('selected');
+      });
+
+      list.appendChild(item);
+    });
+  }
+
+  document.getElementById('splitUploadModal').classList.add('show');
+}
+
+function closeSplitUploadModal() {
+  document.getElementById('splitUploadModal').classList.remove('show');
+  _splitUploadPipeline = [];
+}
+
+async function confirmSplitUpload() {
+  const selected = Array.from(
+    document.querySelectorAll('.split-upload-camera-item.selected')
+  ).map(el => el.dataset.cameraId);
+
+  if (selected.length === 0) {
+    openInfoModal("No Camera Selected", "<p style='color: #ffbd2e;'>Please select at least one camera.</p>");
+    return;
+  }
+
+  closeSplitUploadModal();
+  await applyPipelineToCamera(_splitUploadPipeline, selected);
 }
 
 function triggerAttendanceUpload() {
@@ -1389,4 +1501,298 @@ window.addEventListener('click', function (event) {
   if (_attDropdownEl && !event.target.closest('#attClassDropdown') && !event.target.closest('.images-btn')) {
     closeAttendanceDropdownMenu();
   }
+  // Close split dropdown on outside click
+  if (!event.target.closest('.split-dropdown-wrapper')) {
+    document.getElementById('splitDropdownMenu')?.classList.remove('show');
+  }
+  if (!event.target.closest('.split-cam-dropdown-wrapper')) {
+    document.querySelectorAll('.split-cam-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+  }
 });
+
+/* ═══════════════════════════════════════════════════════════════
+   SPLIT VIEW SYSTEM
+   Max 4 panels. Click a panel to focus/enlarge it. Click back to return.
+════════════════════════════════════════════════════════════════ */
+
+let currentSplitMode = 1;        // 1 = single, 2/3/4 = split
+let splitCameras = {};           // { panelIndex: { cameraId, url } }
+let focusedPanelIndex = null;    // which panel is currently focused
+let splitPipelineActive = false; // true after uploadProject applied a pipeline in split mode
+
+const splitGrid        = document.getElementById('splitGrid');
+const splitFocusOverlay= document.getElementById('splitFocusOverlay');
+const splitFocusImg    = document.getElementById('splitFocusImg');
+const splitFocusPlaceholder = document.getElementById('splitFocusPlaceholder');
+
+/* ── Toggle the split dropdown menu ── */
+function toggleSplitMenu() {
+  const menu = document.getElementById('splitDropdownMenu');
+  menu.classList.toggle('show');
+}
+
+/* ── Set split mode (1 = single, 2/3/4 = grid) ── */
+function setSplitMode(n) {
+  currentSplitMode = n;
+  document.getElementById('splitDropdownMenu').classList.remove('show');
+
+  // Highlight active option
+  document.querySelectorAll('.split-dropdown-menu button').forEach((btn, i) => {
+    btn.classList.toggle('active-split', i + 1 === n);
+  });
+
+  if (n === 1) {
+    // Restore single-camera view
+    exitFocusMode();
+    splitGrid.classList.remove('active', 'split-2', 'split-3', 'split-4');
+    splitGrid.innerHTML = '';
+    splitCameras = {};
+    splitPipelineActive = false;
+
+    // Show normal live feed elements
+    document.getElementById('liveFeedPlaceholder').style.display = '';
+    document.getElementById('live-feed').style.display = '';
+
+    if (currentCameraId) {
+      startCamera();
+    } else {
+      showLiveFeedPlaceholder("Camera idle", "Select a camera to start streaming");
+    }
+  } else {
+    // Hide single-view elements
+    document.getElementById('liveFeedPlaceholder').style.display = 'none';
+    document.getElementById('live-feed').style.display = 'none';
+    exitFocusMode();
+
+    // Build grid
+    splitGrid.className = 'split-grid active split-' + n;
+    splitGrid.innerHTML = '';
+    splitCameras = {};
+
+    for (let i = 0; i < n; i++) {
+      splitGrid.appendChild(buildSplitCell(i));
+    }
+  }
+}
+
+/* ── Build a single split panel ── */
+function buildSplitCell(index) {
+  const cell = document.createElement('div');
+  cell.className = 'split-cell';
+  cell.dataset.index = index;
+
+  // Top bar
+  const bar = document.createElement('div');
+  bar.className = 'split-cell-bar';
+
+  const label = document.createElement('span');
+  label.className = 'split-cell-label';
+  label.textContent = `Cam ${index + 1}`;
+
+  // Custom dropdown wrapper
+  const dropWrapper = document.createElement('div');
+  dropWrapper.className = 'split-cam-dropdown-wrapper';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'split-cam-dropdown-toggle';
+  toggle.innerHTML = `<span class="split-cam-dropdown-label">Select Camera</span><span class="split-cam-dropdown-caret">▼</span>`;
+
+  const menu = document.createElement('div');
+  menu.className = 'split-cam-dropdown-menu';
+
+  function buildSplitDropdownItems() {
+    menu.innerHTML = '';
+    if (cameras.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'split-cam-dropdown-empty';
+      empty.textContent = 'No cameras added yet';
+      menu.appendChild(empty);
+      return;
+    }
+    cameras.forEach(cam => {
+      const item = document.createElement('div');
+      item.className = 'split-cam-dropdown-item';
+
+      const nameBtn = document.createElement('button');
+      nameBtn.type = 'button';
+      nameBtn.className = 'split-cam-dropdown-select';
+      nameBtn.textContent = cam.name;
+      nameBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggle.querySelector('.split-cam-dropdown-label').textContent = cam.name;
+        menu.classList.remove('show');
+        startSplitCell(index, cam.name, cam.url, cell);
+      });
+
+      item.appendChild(nameBtn);
+      menu.appendChild(item);
+    });
+  }
+
+  buildSplitDropdownItems();
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.split-cam-dropdown-menu.show').forEach(m => {
+      if (m !== menu) m.classList.remove('show');
+    });
+    buildSplitDropdownItems();
+    menu.classList.toggle('show');
+  });
+
+  dropWrapper.appendChild(toggle);
+  dropWrapper.appendChild(menu);
+
+  bar.appendChild(label);
+  bar.appendChild(dropWrapper);
+  cell.appendChild(bar);
+
+  // Stream image
+  const img = document.createElement('img');
+  img.className = 'split-cell-img';
+  img.alt = `Camera ${index + 1}`;
+  // NOTE: no onerror that hides the img - MJPEG streams can be slow to start
+  // and browsers fire onerror prematurely. We handle reconnection via src refresh instead.
+  cell.appendChild(img);
+
+  // Idle state
+  const idle = document.createElement('div');
+  idle.className = 'split-cell-idle';
+  idle.innerHTML = `<span class="split-cell-idle-icon">📷</span><span>Select a camera</span>`;
+  cell.appendChild(idle);
+
+  // Expand hint
+  const hint = document.createElement('span');
+  hint.className = 'split-cell-expand';
+  hint.textContent = '⤢ Focus';
+  cell.appendChild(hint);
+
+  // Click on cell body (not bar) → focus mode
+  cell.addEventListener('click', (e) => {
+    if (e.target.closest('.split-cell-bar')) return;
+    enterFocusMode(index);
+  });
+
+  return cell;
+}
+
+/* ── Get the correct stream URL for a split panel ── */
+function getSplitStreamUrl(cameraId, url) {
+  if (splitPipelineActive) {
+    return `http://127.0.0.1:5000/video_processed?camera_id=${encodeURIComponent(cameraId)}&t=${Date.now()}`;
+  }
+  return `http://127.0.0.1:5000/video_raw?url=${encodeURIComponent(url)}&t=${Date.now()}`;
+}
+
+/* ── Start streaming in a split cell (RAW stream, no pipeline) ── */
+async function startSplitCell(index, cameraId, url, cellEl) {
+  splitCameras[index] = { cameraId, url };
+
+  const cell = cellEl || splitGrid.querySelector(`.split-cell[data-index="${index}"]`);
+  if (!cell) return;
+
+  const img  = cell.querySelector('.split-cell-img');
+  const idle = cell.querySelector('.split-cell-idle');
+
+  // Register on server and WAIT - so URL is available before any video_processed call
+  try {
+    await fetch("http://127.0.0.1:5000/register_camera", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ camera_id: cameraId, url })
+    });
+  } catch (e) { console.warn("register_camera failed:", e); }
+
+  const streamUrl = `http://127.0.0.1:5000/video_raw?url=${encodeURIComponent(url)}&t=${Date.now()}`;
+  img.src = streamUrl;
+  img.classList.add('active');
+  if (idle) idle.style.display = 'none';
+
+  if (focusedPanelIndex === index) {
+    splitFocusImg.src = streamUrl;
+    splitFocusImg.classList.add('active');
+    splitFocusPlaceholder.classList.add('hidden');
+  }
+}
+
+/* ── Switch a split cell to its processed stream (called after upload) ── */
+function _switchCellToProcessed(index, cameraId) {
+  const cell = splitGrid.querySelector(`.split-cell[data-index="${index}"]`);
+  if (!cell) return;
+
+  const img  = cell.querySelector('.split-cell-img');
+  const idle = cell.querySelector('.split-cell-idle');
+
+  const url = `http://127.0.0.1:5000/video_processed?camera_id=${encodeURIComponent(cameraId)}&t=${Date.now()}`;
+  console.log(`🎬 [Split] Switching cell ${index} → processed stream for ${cameraId}`);
+
+  img.src = url;
+  img.classList.add('active');
+  if (idle) idle.style.display = 'none';
+
+  if (focusedPanelIndex === index) {
+    splitFocusImg.src = url;
+    splitFocusImg.classList.add('active');
+    splitFocusPlaceholder.classList.add('hidden');
+  }
+}
+
+/* ── Stop streaming in a split cell ── */
+function stopSplitCell(index) {
+  delete splitCameras[index];
+
+  const cell = splitGrid.querySelector(`.split-cell[data-index="${index}"]`);
+  if (!cell) return;
+
+  const img  = cell.querySelector('.split-cell-img');
+  const idle = cell.querySelector('.split-cell-idle');
+
+  img.classList.remove('active');
+  img.removeAttribute('src');
+  idle.style.display = '';
+
+  if (focusedPanelIndex === index) {
+    splitFocusImg.classList.remove('active');
+    splitFocusImg.removeAttribute('src');
+    splitFocusPlaceholder.classList.remove('hidden');
+  }
+}
+
+/* ── Show idle state in a cell ── */
+function showCellIdle(cell) {
+  const idle = cell.querySelector('.split-cell-idle');
+  if (idle) idle.style.display = '';
+}
+
+/* ── Enter focus mode for a panel ── */
+function enterFocusMode(index) {
+  focusedPanelIndex = index;
+  const data = splitCameras[index];
+
+  if (data) {
+    splitFocusImg.src = getSplitStreamUrl(data.cameraId, data.url);
+    splitFocusImg.classList.add('active');
+    splitFocusPlaceholder.classList.add('hidden');
+  } else {
+    splitFocusImg.classList.remove('active');
+    splitFocusImg.removeAttribute('src');
+    splitFocusPlaceholder.classList.remove('hidden');
+  }
+
+  splitFocusOverlay.classList.add('active');
+  splitGrid.style.display = 'none';
+}
+
+/* ── Exit focus mode, return to grid ── */
+function exitFocusMode() {
+  focusedPanelIndex = null;
+  splitFocusOverlay.classList.remove('active');
+  splitFocusImg.classList.remove('active');
+  splitFocusImg.removeAttribute('src');
+  splitFocusPlaceholder.classList.remove('hidden');
+
+  if (currentSplitMode > 1) {
+    splitGrid.style.display = '';
+  }
+}

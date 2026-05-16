@@ -472,6 +472,138 @@ class LiveStreamServer:
             self.running = True
             return {"status": "camera switched", "camera_id": camera_id}
 
+        @self.app.post("/register_camera")
+        async def register_camera(request: Request):
+            """
+            Registers a camera URL without switching the main pipeline stream.
+            Used by split-view panels so /video_processed can find the URL.
+            """
+            data      = await request.json()
+            camera_id = data.get("camera_id")
+            url       = data.get("url")
+
+            if not camera_id or not url:
+                return JSONResponse({"status": "missing camera_id or url"}, status_code=400)
+
+            self.camera_sources[camera_id] = url
+            if camera_id not in self.camera_pipelines:
+                self.camera_pipelines[camera_id] = []
+
+            return {"status": "registered", "camera_id": camera_id}
+
+        # ── RAW stream for split-view panels (no pipeline processing) ──────────
+        @self.app.get("/video_raw")
+        async def video_raw(url: str):
+            if not url:
+                return JSONResponse({"error": "url param required"}, status_code=400)
+
+            async def raw_frames(cam_url: str):
+                loop = asyncio.get_event_loop()
+                caps = [cv2.VideoCapture(cam_url)]   # list so we can reassign inside generator
+                try:
+                    while True:
+                        ok, frame = await loop.run_in_executor(None, caps[0].read)
+                        if not ok or frame is None:
+                            await asyncio.sleep(0.2)
+                            await loop.run_in_executor(None, caps[0].release)
+                            caps[0] = cv2.VideoCapture(cam_url)
+                            continue
+
+                        jpeg = await loop.run_in_executor(_encode_executor, _encode_frame, frame, 70)
+                        if jpeg is None:
+                            continue
+                        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+                        await asyncio.sleep(1 / 25)
+                finally:
+                    caps[0].release()
+
+            return StreamingResponse(raw_frames(url),
+                                     media_type="multipart/x-mixed-replace; boundary=frame")
+
+        # ── PROCESSED stream per camera_id (pipeline applied independently) ──
+        @self.app.get("/video_processed")
+        async def video_processed(camera_id: str):
+            if not camera_id:
+                return JSONResponse({"error": "camera_id param required"}, status_code=400)
+
+            server_ref = self
+
+            async def processed_frames(cam_id: str):
+                loop = asyncio.get_event_loop()
+
+                # Wait up to 3 s for the URL to appear (register_camera may arrive just before us)
+                cam_url = None
+                for _ in range(30):
+                    cam_url = server_ref.camera_sources.get(cam_id)
+                    if cam_url:
+                        break
+                    await asyncio.sleep(0.1)
+
+                if not cam_url:
+                    print(f"❌ video_processed: no URL registered for camera_id={cam_id!r}")
+                    return
+
+                print(f"▶ video_processed starting for {cam_id} → {cam_url}")
+                caps = [cv2.VideoCapture(cam_url)]   # list allows reassignment inside generator
+                frame_count = 0
+
+                try:
+                    while True:
+                        ok, frame = await loop.run_in_executor(None, caps[0].read)
+                        if not ok or frame is None:
+                            await asyncio.sleep(0.2)
+                            await loop.run_in_executor(None, caps[0].release)
+                            caps[0] = cv2.VideoCapture(cam_url)
+                            continue
+
+                        frame = cv2.resize(frame, (640, 480))
+                        frame_count += 1
+                        run_heavy = (frame_count % SKIP_N == 0)
+
+                        pipeline = server_ref.camera_pipelines.get(cam_id, [])
+
+                        try:
+                            if pipeline:
+                                if _pipeline_uses_nmn(pipeline):
+                                    if run_heavy:
+                                        frame = server_ref.nmn.process(frame)
+                                else:
+                                    for step in pipeline:
+                                        if not run_heavy and step in HEAVY_MODELS:
+                                            continue
+                                        if step == "Color Detection":
+                                            frame = apply_color_detection(frame)
+                                        elif step == "Tracking":
+                                            frame = server_ref.human_tracker.process(frame)
+                                        elif step == "Object Counting":
+                                            frame, _ = server_ref.object_counter.process(frame)
+                                        elif step == "Gap Detection":
+                                            frame = server_ref.gap_detector.process(frame)
+                                        elif step == "Attendance":
+                                            frame = server_ref.attendance.process(frame)
+                                        elif step == "Security":
+                                            frame = server_ref.security.process(frame)
+                                        elif step == "Parking Management":
+                                            frame = server_ref.parking_model.process(frame)
+                                        elif step == "Heatmap":
+                                            frame = server_ref.heatmap.process(frame)
+                                        elif step == "Fire & Smoke Detection":
+                                            frame = server_ref.fire_smoke_detector.process(frame)
+                        except Exception as e:
+                            print(f"⚠️ Split pipeline error [{cam_id}]: {e}")
+
+                        jpeg = await loop.run_in_executor(_encode_executor, _encode_frame, frame, 75)
+                        if jpeg is None:
+                            continue
+
+                        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+                        await asyncio.sleep(1 / 20)
+                finally:
+                    caps[0].release()
+
+            return StreamingResponse(processed_frames(camera_id),
+                                     media_type="multipart/x-mixed-replace; boundary=frame")
+
         @self.app.get("/attendance_results")
         async def attendance_results():
             return JSONResponse(self.attendance.get_results())

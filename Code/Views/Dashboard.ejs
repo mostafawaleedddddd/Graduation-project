@@ -118,15 +118,37 @@
                     <button type="button" class="live-feed-btn" onclick="openAddCamera()">➕ Add</button>
                     <button type="button" class="live-feed-btn" onclick="saveProject()">💾 Save</button>
                     <button type="button" class="live-feed-btn" onclick="uploadProject()">📤 Upload</button>
+                    <div class="split-dropdown-wrapper">
+                        <button type="button" class="live-feed-btn split-btn" id="splitBtn" onclick="toggleSplitMenu()">⊞ Split</button>
+                        <div class="split-dropdown-menu" id="splitDropdownMenu">
+                            <button type="button" onclick="setSplitMode(1)">Single View</button>
+                            <button type="button" onclick="setSplitMode(2)">2 Cameras</button>
+                            <button type="button" onclick="setSplitMode(3)">3 Cameras</button>
+                            <button type="button" onclick="setSplitMode(4)">4 Cameras</button>
+                        </div>
+                    </div>
                     <input id="attendanceUploadInput" type="file" accept="image/*" style="display:none" multiple>
                 </div>
             </div>
-            <div class="live-feed-content">
-                <div id="liveFeedPlaceholder" class="live-feed-placeholder">
+            <div class="live-feed-content" id="liveFeedContent">
+                <!-- Single view (default) -->
+                <div id="liveFeedPlaceholder" class="live-feed-placeholder show">
                     <span class="live-feed-placeholder-title">Camera idle</span>
                     <span class="live-feed-placeholder-text">Choose a saved camera or add a new one to begin the stream.</span>
                 </div>
                 <img id="live-feed" alt="Live Camera Feed">
+
+                <!-- Split grid (hidden by default) -->
+                <div class="split-grid" id="splitGrid"></div>
+
+                <!-- Focused panel (when user clicks a split cell) -->
+                <div class="split-focus-overlay" id="splitFocusOverlay">
+                    <button class="split-focus-back" id="splitFocusBack" onclick="exitFocusMode()">← Back to Split</button>
+                    <img class="split-focus-img" id="splitFocusImg" alt="Focused Feed">
+                    <div class="split-focus-placeholder" id="splitFocusPlaceholder">
+                        <span>No camera selected</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -199,6 +221,20 @@
                 <button type="button" class="btn-primary" id="attSaveBtn" onclick="saveAttendanceClass()">
                     <span id="attSaveBtnText">Save Class</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Split Camera Selection Modal -->
+    <div id="splitUploadModal" class="modal-overlay">
+        <div class="modal-content window-panel">
+            <button type="button" class="close-btn window-close" onclick="closeSplitUploadModal()">&times;</button>
+            <h3>Select Cameras</h3>
+            <p class="split-upload-subtitle">Choose which cameras to apply the pipeline to:</p>
+            <div id="splitUploadCameraList" class="split-upload-camera-list"></div>
+            <div class="action-buttons window-actions">
+                <button type="button" class="btn-secondary" onclick="closeSplitUploadModal()">Cancel</button>
+                <button type="button" class="btn-primary" onclick="confirmSplitUpload()">✔ Apply</button>
             </div>
         </div>
     </div>
