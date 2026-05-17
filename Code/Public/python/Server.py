@@ -18,7 +18,7 @@ from human_tracking import HumanTracker
 from object_countingtry import ObjectCounterBlock
 from two_models import DualModelObjectCounter
 from shelf_gap_detect_images import ShelfGapDetector
-# from attendence import AttendanceSystem
+from attendence import AttendanceSystem
 from security import SecuritySystem
 from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
@@ -112,7 +112,7 @@ class LiveStreamServer:
         self.object_counter     = ObjectCounterBlock()
         self.dual_counter       = DualModelObjectCounter()
         self.gap_detector       = ShelfGapDetector()
-        # self.attendance         = AttendanceSystem()
+        self.attendance         = AttendanceSystem()
         self.security           = SecuritySystem()
         self.parking_model      = ParkingManagementBlock()
         self.heatmap            = HeatmapBlock()
@@ -136,12 +136,12 @@ class LiveStreamServer:
             context_extract_fn=tracking_extractor,
         )
 
-        # self.nmn.register(
-        #     "Attendance",
-        #     self.attendance,
-        #     raw_process_fn=self.attendance.process,
-        #     # No extract_fn needed — Attendance is a consumer, not a producer.
-        # )
+        self.nmn.register(
+            "Attendance",
+            self.attendance,
+            raw_process_fn=self.attendance.process,
+            # No extract_fn needed — Attendance is a consumer, not a producer.
+        )
 
         self.nmn.register(
             "Security",
@@ -316,8 +316,8 @@ class LiveStreamServer:
                     elif step == "Gap Detection":
                         frame = self.gap_detector.process(frame)
 
-                    # elif step == "Attendance":
-                    #     frame = self.attendance.process(frame)
+                    elif step == "Attendance":
+                        frame = self.attendance.process(frame)
 
                     elif step == "Security":
                         frame = self.security.process(frame)
@@ -576,8 +576,8 @@ class LiveStreamServer:
                                             frame, _ = server_ref.object_counter.process(frame)
                                         elif step == "Gap Detection":
                                             frame = server_ref.gap_detector.process(frame)
-                                        # elif step == "Attendance":
-                                        #     frame = server_ref.attendance.process(frame)
+                                        elif step == "Attendance":
+                                            frame = server_ref.attendance.process(frame)
                                         elif step == "Security":
                                             frame = server_ref.security.process(frame)
                                         elif step == "Parking Management":
