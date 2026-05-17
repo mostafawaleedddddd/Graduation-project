@@ -18,7 +18,7 @@ from human_tracking import HumanTracker
 from object_countingtry import ObjectCounterBlock
 from two_models import DualModelObjectCounter
 from shelf_gap_detect_images import ShelfGapDetector
-from attendence import AttendanceSystem
+# from attendence import AttendanceSystem
 from security import SecuritySystem
 from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
@@ -112,7 +112,7 @@ class LiveStreamServer:
         self.object_counter     = ObjectCounterBlock()
         self.dual_counter       = DualModelObjectCounter()
         self.gap_detector       = ShelfGapDetector()
-        self.attendance         = AttendanceSystem()
+        # self.attendance         = AttendanceSystem()
         self.security           = SecuritySystem()
         self.parking_model      = ParkingManagementBlock()
         self.heatmap            = HeatmapBlock()
@@ -136,12 +136,12 @@ class LiveStreamServer:
             context_extract_fn=tracking_extractor,
         )
 
-        self.nmn.register(
-            "Attendance",
-            self.attendance,
-            raw_process_fn=self.attendance.process,
-            # No extract_fn needed — Attendance is a consumer, not a producer.
-        )
+        # self.nmn.register(
+        #     "Attendance",
+        #     self.attendance,
+        #     raw_process_fn=self.attendance.process,
+        #     # No extract_fn needed — Attendance is a consumer, not a producer.
+        # )
 
         self.nmn.register(
             "Security",
@@ -316,8 +316,8 @@ class LiveStreamServer:
                     elif step == "Gap Detection":
                         frame = self.gap_detector.process(frame)
 
-                    elif step == "Attendance":
-                        frame = self.attendance.process(frame)
+                    # elif step == "Attendance":
+                    #     frame = self.attendance.process(frame)
 
                     elif step == "Security":
                         frame = self.security.process(frame)
@@ -491,7 +491,6 @@ class LiveStreamServer:
 
             return {"status": "registered", "camera_id": camera_id}
 
-        # ── RAW stream for split-view panels (no pipeline processing) ──────────
         @self.app.get("/video_raw")
         async def video_raw(url: str):
             if not url:
@@ -499,28 +498,27 @@ class LiveStreamServer:
 
             async def raw_frames(cam_url: str):
                 loop = asyncio.get_event_loop()
-                caps = [cv2.VideoCapture(cam_url)]   # list so we can reassign inside generator
+                cap = [cv2.VideoCapture(cam_url)]
                 try:
                     while True:
-                        ok, frame = await loop.run_in_executor(None, caps[0].read)
-                        if not ok or frame is None:
+                        ret, frame = await loop.run_in_executor(None, cap[0].read)
+                        if not ret or frame is None:
                             await asyncio.sleep(0.2)
-                            await loop.run_in_executor(None, caps[0].release)
-                            caps[0] = cv2.VideoCapture(cam_url)
+                            await loop.run_in_executor(None, cap[0].release)
+                            cap[0] = cv2.VideoCapture(cam_url)
                             continue
-
                         jpeg = await loop.run_in_executor(_encode_executor, _encode_frame, frame, 70)
                         if jpeg is None:
                             continue
                         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
                         await asyncio.sleep(1 / 25)
                 finally:
-                    caps[0].release()
+                    cap[0].release()
 
             return StreamingResponse(raw_frames(url),
                                      media_type="multipart/x-mixed-replace; boundary=frame")
 
-        # ── PROCESSED stream per camera_id (pipeline applied independently) ──
+        # ── PROCESSED stream per camera_id ───────────────────────────────────
         @self.app.get("/video_processed")
         async def video_processed(camera_id: str):
             if not camera_id:
@@ -531,7 +529,7 @@ class LiveStreamServer:
             async def processed_frames(cam_id: str):
                 loop = asyncio.get_event_loop()
 
-                # Wait up to 3 s for the URL to appear (register_camera may arrive just before us)
+                # Poll up to 3 s for register_camera to store the URL
                 cam_url = None
                 for _ in range(30):
                     cam_url = server_ref.camera_sources.get(cam_id)
@@ -540,27 +538,26 @@ class LiveStreamServer:
                     await asyncio.sleep(0.1)
 
                 if not cam_url:
-                    print(f"❌ video_processed: no URL registered for camera_id={cam_id!r}")
+                    print(f"❌ video_processed: no URL for camera_id={cam_id!r}")
                     return
 
-                print(f"▶ video_processed starting for {cam_id} → {cam_url}")
-                caps = [cv2.VideoCapture(cam_url)]   # list allows reassignment inside generator
+                print(f"▶ video_processed: {cam_id} → {cam_url}")
+                cap = [cv2.VideoCapture(cam_url)]
                 frame_count = 0
 
                 try:
                     while True:
-                        ok, frame = await loop.run_in_executor(None, caps[0].read)
-                        if not ok or frame is None:
+                        ret, frame = await loop.run_in_executor(None, cap[0].read)
+                        if not ret or frame is None:
                             await asyncio.sleep(0.2)
-                            await loop.run_in_executor(None, caps[0].release)
-                            caps[0] = cv2.VideoCapture(cam_url)
+                            await loop.run_in_executor(None, cap[0].release)
+                            cap[0] = cv2.VideoCapture(cam_url)
                             continue
 
                         frame = cv2.resize(frame, (640, 480))
                         frame_count += 1
                         run_heavy = (frame_count % SKIP_N == 0)
-
-                        pipeline = server_ref.camera_pipelines.get(cam_id, [])
+                        pipeline  = server_ref.camera_pipelines.get(cam_id, [])
 
                         try:
                             if pipeline:
@@ -579,8 +576,8 @@ class LiveStreamServer:
                                             frame, _ = server_ref.object_counter.process(frame)
                                         elif step == "Gap Detection":
                                             frame = server_ref.gap_detector.process(frame)
-                                        elif step == "Attendance":
-                                            frame = server_ref.attendance.process(frame)
+                                        # elif step == "Attendance":
+                                        #     frame = server_ref.attendance.process(frame)
                                         elif step == "Security":
                                             frame = server_ref.security.process(frame)
                                         elif step == "Parking Management":
@@ -599,7 +596,7 @@ class LiveStreamServer:
                         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
                         await asyncio.sleep(1 / 20)
                 finally:
-                    caps[0].release()
+                    cap[0].release()
 
             return StreamingResponse(processed_frames(camera_id),
                                      media_type="multipart/x-mixed-replace; boundary=frame")

@@ -611,58 +611,51 @@ async function uploadProject() {
 /* ── Apply pipeline to a list of camera IDs ── */
 async function applyPipelineToCamera(pipeline, cameraIds) {
   try {
+    const results = await Promise.all(cameraIds.map(camId =>
+      fetch("http://127.0.0.1:5000/set_pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipeline, camera_id: camId })
+      }).then(r => { if (!r.ok) throw new Error("Server error"); return r.json(); })
+    ));
+
+    const camList = cameraIds.join(", ");
+    openInfoModal("Models Applied", `<p>Successfully applied:<br><b>${pipeline.join(" &rarr; ")}</b><br><span style="color:var(--text-dim);font-size:0.85rem;">Applied to: ${camList}</span></p>`);
+    updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
+    console.log("Backend pipelines:", results);
+
     if (currentSplitMode > 1) {
-      // ── STEP 1: register every selected camera (await each one) ──────────
-      for (const [, data] of Object.entries(splitCameras)) {
+      for (const [idx, data] of Object.entries(splitCameras)) {
         if (!cameraIds.includes(data.cameraId)) continue;
+
+        // AWAIT register_camera — server must store the URL before
+        // the browser requests /video_processed, otherwise stream is empty.
         await fetch("http://127.0.0.1:5000/register_camera", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ camera_id: data.cameraId, url: data.url })
         });
-        console.log(`[split] registered ${data.cameraId}`);
-      }
 
-      // ── STEP 2: set pipeline for each camera (await each one) ────────────
-      for (const camId of cameraIds) {
-        await fetch("http://127.0.0.1:5000/set_pipeline", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pipeline, camera_id: camId })
-        });
-        console.log(`[split] pipeline set for ${camId}:`, pipeline);
-      }
-
-      // ── STEP 3: let the server open the capture and warm up ──────────────
-      await new Promise(r => setTimeout(r, 800));
-
-      // ── STEP 4: switch each cell to the processed stream ─────────────────
-      splitPipelineActive = true;
-      for (const [idx, data] of Object.entries(splitCameras)) {
-        if (cameraIds.includes(data.cameraId)) {
-          _switchCellToProcessed(parseInt(idx), data.cameraId);
+        const cell = splitGrid.querySelector(`.split-cell[data-index="${idx}"]`);
+        if (!cell) continue;
+        const img  = cell.querySelector('.split-cell-img');
+        const idle = cell.querySelector('.split-cell-idle');
+        const processedUrl = `http://127.0.0.1:5000/video_processed?camera_id=${encodeURIComponent(data.cameraId)}&t=${Date.now()}`;
+        img.src = processedUrl;
+        img.classList.add('active');
+        if (idle) idle.style.display = 'none';
+        if (focusedPanelIndex === parseInt(idx)) {
+          splitFocusImg.src = processedUrl;
+          splitFocusImg.classList.add('active');
+          splitFocusPlaceholder.classList.add('hidden');
         }
       }
-
-    } else {
-      // ── Single mode ───────────────────────────────────────────────────────
-      await fetch("http://127.0.0.1:5000/set_pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pipeline, camera_id: cameraIds[0] })
-      });
+      splitPipelineActive = true;
     }
-
-    openInfoModal("Models Applied",
-      `<p>Pipeline applied:<br><b>${pipeline.join(" → ")}</b><br>
-       <span style="color:var(--text-dim);font-size:0.85rem;">
-         Cameras: ${cameraIds.join(", ")}
-       </span></p>`);
-    updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
-
   } catch (err) {
-    console.error("applyPipelineToCamera error:", err);
-    openInfoModal("Connection Error", "<p style='color:#ff6b6b;'>Backend unreachable.</p>");
+    console.error(err);
+    openInfoModal("Connection Error", "<p style='color: #ff6b6b;'>Backend is not running or unreachable.</p>");
+    updateLiveFeed("Backend not running");
   }
 }
 
@@ -718,8 +711,11 @@ async function confirmSplitUpload() {
     return;
   }
 
+  // Capture pipeline BEFORE closing the modal — closeSplitUploadModal()
+  // resets _splitUploadPipeline to [] which would empty the reference passed below.
+  const pipeline = [..._splitUploadPipeline];
   closeSplitUploadModal();
-  await applyPipelineToCamera(_splitUploadPipeline, selected);
+  await applyPipelineToCamera(pipeline, selected);
 }
 
 function triggerAttendanceUpload() {
@@ -1652,8 +1648,7 @@ function buildSplitCell(index) {
   const img = document.createElement('img');
   img.className = 'split-cell-img';
   img.alt = `Camera ${index + 1}`;
-  // NOTE: no onerror that hides the img - MJPEG streams can be slow to start
-  // and browsers fire onerror prematurely. We handle reconnection via src refresh instead.
+  img.onerror = () => { img.classList.remove('active'); showCellIdle(cell); };
   cell.appendChild(img);
 
   // Idle state
@@ -1685,8 +1680,8 @@ function getSplitStreamUrl(cameraId, url) {
   return `http://127.0.0.1:5000/video_raw?url=${encodeURIComponent(url)}&t=${Date.now()}`;
 }
 
-/* ── Start streaming in a split cell (RAW stream, no pipeline) ── */
-async function startSplitCell(index, cameraId, url, cellEl) {
+/* ── Start streaming in a split cell ── */
+function startSplitCell(index, cameraId, url, cellEl) {
   splitCameras[index] = { cameraId, url };
 
   const cell = cellEl || splitGrid.querySelector(`.split-cell[data-index="${index}"]`);
@@ -1695,44 +1690,21 @@ async function startSplitCell(index, cameraId, url, cellEl) {
   const img  = cell.querySelector('.split-cell-img');
   const idle = cell.querySelector('.split-cell-idle');
 
-  // Register on server and WAIT - so URL is available before any video_processed call
-  try {
-    await fetch("http://127.0.0.1:5000/register_camera", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ camera_id: cameraId, url })
-    });
-  } catch (e) { console.warn("register_camera failed:", e); }
+  // Register this camera on the server so /video_processed can find its URL
+  // Uses /register_camera which stores the URL without disrupting the main stream.
+  fetch("http://127.0.0.1:5000/register_camera", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ camera_id: cameraId, url: url })
+  }).catch(err => console.warn("register_camera failed for split panel:", err));
 
-  const streamUrl = `http://127.0.0.1:5000/video_raw?url=${encodeURIComponent(url)}&t=${Date.now()}`;
-  img.src = streamUrl;
+  img.src = getSplitStreamUrl(cameraId, url);
   img.classList.add('active');
-  if (idle) idle.style.display = 'none';
+  idle.style.display = 'none';
 
+  // If this panel is currently focused, update focus view too
   if (focusedPanelIndex === index) {
-    splitFocusImg.src = streamUrl;
-    splitFocusImg.classList.add('active');
-    splitFocusPlaceholder.classList.add('hidden');
-  }
-}
-
-/* ── Switch a split cell to its processed stream (called after upload) ── */
-function _switchCellToProcessed(index, cameraId) {
-  const cell = splitGrid.querySelector(`.split-cell[data-index="${index}"]`);
-  if (!cell) return;
-
-  const img  = cell.querySelector('.split-cell-img');
-  const idle = cell.querySelector('.split-cell-idle');
-
-  const url = `http://127.0.0.1:5000/video_processed?camera_id=${encodeURIComponent(cameraId)}&t=${Date.now()}`;
-  console.log(`🎬 [Split] Switching cell ${index} → processed stream for ${cameraId}`);
-
-  img.src = url;
-  img.classList.add('active');
-  if (idle) idle.style.display = 'none';
-
-  if (focusedPanelIndex === index) {
-    splitFocusImg.src = url;
+    splitFocusImg.src = img.src;
     splitFocusImg.classList.add('active');
     splitFocusPlaceholder.classList.add('hidden');
   }
