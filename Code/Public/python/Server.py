@@ -118,6 +118,15 @@ class LiveStreamServer:
         self.heatmap            = HeatmapBlock()
         self.shelf_orchestrator = ShelfOrchestrator()
         self.fire_smoke_detector = FireSmokeDetector()
+
+        # ================= PER-CAMERA MODEL INSTANCES =================
+        # Models that are NOT thread-safe (e.g. any YOLO-based detector)
+        # must have one instance per camera stream to avoid concurrent
+        # GPU tensor collisions.  We lazily create and cache them here.
+        # Key: camera_id  →  Value: dict of { step_name: model_instance }
+        self._per_camera_models: dict[str, dict] = {}
+        self._per_camera_lock = threading.Lock()
+
         # ================= 2. DYNAMIC NMN SETUP =================
         # Models are injected ONCE here — NMN never loads them again.
         # raw_process_fn wraps each model's existing .process() signature.
@@ -336,6 +345,32 @@ class LiveStreamServer:
             except Exception as e:
                 print(f"⚠️ Processing Error: {e}")
 
+    # ================= PER-CAMERA MODEL FACTORY ================================
+    def _get_camera_model(self, cam_id: str, step: str):
+        """
+        Returns the model instance for (cam_id, step), creating it on first use.
+
+        Models that share state / GPU tensors across calls (e.g. YOLO-based
+        detectors) MUST NOT be shared across concurrent camera streams or you
+        get "only 0-dimensional arrays can be converted to Python scalars".
+        Thread-safe — protected by _per_camera_lock.
+        """
+        with self._per_camera_lock:
+            if cam_id not in self._per_camera_models:
+                self._per_camera_models[cam_id] = {}
+            cam_models = self._per_camera_models[cam_id]
+            if step not in cam_models:
+                print(f"🔧 Creating dedicated {step} model for camera '{cam_id}'")
+                if step == "Fire & Smoke Detection":
+                    cam_models[step] = FireSmokeDetector()
+                # Add other per-camera model types here as needed, e.g.:
+                # elif step == "Some Other Model":
+                #     cam_models[step] = SomeOtherModel()
+                else:
+                    # Shared/stateless models — return global instance
+                    return None
+            return cam_models[step]
+
     # ================= MJPEG STREAM ===========================================
     async def generate_frames(self):
         loop = asyncio.get_event_loop()
@@ -499,6 +534,16 @@ class LiveStreamServer:
             async def raw_frames(cam_url: str):
                 loop = asyncio.get_event_loop()
                 cap = [cv2.VideoCapture(cam_url)]
+                cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                if not cap[0].isOpened():
+                    print(f"❌ video_raw: failed to open camera source {cam_url!r}")
+                    await loop.run_in_executor(None, cap[0].release)
+                    await asyncio.sleep(1)
+                    cap[0] = cv2.VideoCapture(cam_url)
+                    cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    if not cap[0].isOpened():
+                        print(f"❌ video_raw: persistent open failure for {cam_url!r}")
+                        return
                 try:
                     while True:
                         ret, frame = await loop.run_in_executor(None, cap[0].read)
@@ -506,12 +551,13 @@ class LiveStreamServer:
                             await asyncio.sleep(0.2)
                             await loop.run_in_executor(None, cap[0].release)
                             cap[0] = cv2.VideoCapture(cam_url)
+                            cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
                             continue
                         jpeg = await loop.run_in_executor(_encode_executor, _encode_frame, frame, 70)
                         if jpeg is None:
                             continue
                         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
-                        await asyncio.sleep(1 / 25)
+                        await asyncio.sleep(0)
                 finally:
                     cap[0].release()
 
@@ -543,6 +589,16 @@ class LiveStreamServer:
 
                 print(f"▶ video_processed: {cam_id} → {cam_url}")
                 cap = [cv2.VideoCapture(cam_url)]
+                cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                if not cap[0].isOpened():
+                    print(f"❌ video_processed: failed to open camera source {cam_url!r}")
+                    await loop.run_in_executor(None, cap[0].release)
+                    await asyncio.sleep(1)
+                    cap[0] = cv2.VideoCapture(cam_url)
+                    cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    if not cap[0].isOpened():
+                        print(f"❌ video_processed: persistent open failure for {cam_url!r}")
+                        return
                 frame_count = 0
 
                 try:
@@ -552,6 +608,7 @@ class LiveStreamServer:
                             await asyncio.sleep(0.2)
                             await loop.run_in_executor(None, cap[0].release)
                             cap[0] = cv2.VideoCapture(cam_url)
+                            cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
                             continue
 
                         frame = cv2.resize(frame, (640, 480))
@@ -585,16 +642,25 @@ class LiveStreamServer:
                                         elif step == "Heatmap":
                                             frame = server_ref.heatmap.process(frame)
                                         elif step == "Fire & Smoke Detection":
-                                            frame = server_ref.fire_smoke_detector.process(frame)
+                                            # Use a dedicated per-camera instance to avoid
+                                            # concurrent GPU tensor collisions between panels.
+                                            fire_model = server_ref._get_camera_model(cam_id, step)
+                                            if fire_model is None:
+                                                fire_model = server_ref.fire_smoke_detector
+                                            frame = fire_model.process(frame)
                         except Exception as e:
+                            import traceback
                             print(f"⚠️ Split pipeline error [{cam_id}]: {e}")
+                            traceback.print_exc()
 
                         jpeg = await loop.run_in_executor(_encode_executor, _encode_frame, frame, 75)
                         if jpeg is None:
                             continue
 
                         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
-                        await asyncio.sleep(1 / 20)
+                        # Yield control without an artificial sleep so frames
+                        # stream as fast as the camera and model allow.
+                        await asyncio.sleep(0)
                 finally:
                     cap[0].release()
 

@@ -76,8 +76,8 @@ class KalmanBoxTracker:
     def predict(self) -> None:
         """Advance one time step (no measurement)."""
         # Prevent negative area from propagating
-        if (self.kf.x[2] + self.kf.x[6]) <= 0:
-            self.kf.x[6] = 0.0
+        if (float(self.kf.x[2, 0]) + float(self.kf.x[6, 0])) <= 0:
+            self.kf.x[6, 0] = 0.0
         self.kf.predict()
 
     def update(self, bbox: np.ndarray) -> None:
@@ -89,19 +89,19 @@ class KalmanBoxTracker:
         Apply a 2×3 affine matrix (from CMC) to the track's predicted position.
         This compensates for camera motion before the association step.
         """
-        cx = float(self.kf.x[0])
-        cy = float(self.kf.x[1])
+        cx = float(self.kf.x[0, 0])
+        cy = float(self.kf.x[1, 0])
 
         # Transform center point
         new_cx = M[0, 0] * cx + M[0, 1] * cy + M[0, 2]
         new_cy = M[1, 0] * cx + M[1, 1] * cy + M[1, 2]
-        self.kf.x[0] = new_cx
-        self.kf.x[1] = new_cy
+        self.kf.x[0, 0] = new_cx
+        self.kf.x[1, 0] = new_cy
 
         # Scale the area by |det(M[:2,:2])| to keep the box consistent
         scale = abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0])
         if scale > 0:
-            self.kf.x[2] = float(self.kf.x[2]) * scale
+            self.kf.x[2, 0] = float(self.kf.x[2, 0]) * scale
 
     def get_state(self) -> np.ndarray | None:
         """Return [x1,y1,x2,y2], or None if the state is degenerate."""
