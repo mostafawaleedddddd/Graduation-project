@@ -1549,6 +1549,40 @@ window.addEventListener('click', function (event) {
   }
 });
 
+const liveFeedPanel = document.querySelector('.live-feed-panel');
+const resizeGrip = document.querySelector('.resize-grip');
+let isResizingPanel = false;
+let panelStartWidth = 0;
+let panelStartHeight = 0;
+let panelStartX = 0;
+let panelStartY = 0;
+
+resizeGrip?.addEventListener('mousedown', (event) => {
+  event.preventDefault();
+  isResizingPanel = true;
+  panelStartWidth = liveFeedPanel.offsetWidth;
+  panelStartHeight = liveFeedPanel.offsetHeight;
+  panelStartX = event.clientX;
+  panelStartY = event.clientY;
+  document.body.style.userSelect = 'none';
+});
+
+window.addEventListener('mousemove', (event) => {
+  if (!isResizingPanel) return;
+  const deltaX = event.clientX - panelStartX;
+  const deltaY = event.clientY - panelStartY;
+  const newWidth = Math.max(320, Math.min(window.innerWidth - 250, panelStartWidth - deltaX));
+  const newHeight = Math.max(320, Math.min(window.innerHeight - 36, panelStartHeight - deltaY));
+  liveFeedPanel.style.width = `${newWidth}px`;
+  liveFeedPanel.style.height = `${newHeight}px`;
+});
+
+window.addEventListener('mouseup', () => {
+  if (!isResizingPanel) return;
+  isResizingPanel = false;
+  document.body.style.userSelect = '';
+});
+
 /* ═══════════════════════════════════════════════════════════════
    SPLIT VIEW SYSTEM
    Max 4 panels. Click a panel to focus/enlarge it. Click back to return.

@@ -403,7 +403,12 @@ svg {
   bottom: 18px;
   right: 18px;
   width: min(520px, calc(100vw - 36px));
+  min-width: 320px;
   min-height: 320px;
+  max-width: calc(100vw - 250px);
+  max-height: calc(100vh - 36px);
+  resize: both;
+  overflow: auto;
   background: rgba(5, 13, 31, 0.9);
   backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
@@ -615,6 +620,30 @@ svg {
   justify-content: center;
   position: relative;
   min-height: 240px;
+}
+
+.resize-hint {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.4px;
+  padding-left: 4px;
+  margin-top: -8px;
+}
+
+.live-feed-placeholder .resize-grip {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  width: 18px;
+  height: 18px;
+  border-left: 2px solid rgba(255, 255, 255, 0.35);
+  border-top: 2px solid rgba(255, 255, 255, 0.35);
+  cursor: nwse-resize;
+}
+
+.live-feed-placeholder .resize-grip:hover {
+  transform: scale(1.1);
+  opacity: 0.85;
 }
 
 #cameraFeed,
