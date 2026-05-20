@@ -223,6 +223,11 @@ class DynamicNMN:
                                              thread_name_prefix="NMN")
         self._timing:   Dict[str, float] = {}  # ms per module, last frame
 
+        # Persistent cross-frame identity memory for Attendance+Tracking bridge.
+        # track_id -> recognised name; survives across frames so a person stays
+        # labelled after the first hit (attendance only logs each name once).
+        self.id_to_name_memory: Dict[int, str] = {}
+
     # ── Registration ──────────────────────────────────────────────────────────
 
     def register(
@@ -253,6 +258,16 @@ class DynamicNMN:
             self._order  = self._topo_sort(active)
             self._stages = self._build_stages(self._order, set(active))
             self._install_bridges(set(active))
+
+            # Safety: if Tracking is active without Attendance, make sure its
+            # labels are always visible (suppress_draw could be True from a
+            # previous Tracking+Attendance session) and wipe identity memory.
+            if "Tracking" in self._modules and "Attendance" not in set(active):
+                tracker = self._modules["Tracking"].model
+                if hasattr(tracker, "suppress_draw"):
+                    tracker.suppress_draw = False
+                self.id_to_name_memory.clear()
+
             logger.info("[NMN] Graph → stages: %s", self._stages)
 
     # ── Per-frame entry point ─────────────────────────────────────────────────
@@ -343,11 +358,26 @@ class DynamicNMN:
         """
         # Attendance ← Tracking
         if "Attendance" in self._modules:
-            bridge = bridge_attendance_tracking \
-                if ("Attendance" in active and "Tracking" in active) else None
-            self._modules["Attendance"].set_bridge(bridge)
-            if bridge:
+            if "Attendance" in active and "Tracking" in active:
+                tracker_model = self._modules["Tracking"].model
+                _tm  = tracker_model
+                _mem = self.id_to_name_memory   # persistent dict on the NMN instance
+                def _attendance_bridge_with_tracker(frame, ctx, model,
+                                                     _tracker=_tm, _memory=_mem):
+                    ctx.set("_tracker_model",   _tracker)
+                    ctx.set("_id_to_name_memory", _memory)
+                    return bridge_attendance_tracking(frame, ctx, model)
+                self._modules["Attendance"].set_bridge(_attendance_bridge_with_tracker)
                 logger.info("[NMN] Bridge installed: Attendance ← Tracking")
+            else:
+                # Bridge removed — restore normal ID label drawing on the tracker
+                self._modules["Attendance"].set_bridge(None)
+                self.id_to_name_memory.clear()   # wipe memory when bridge is off
+                if "Tracking" in self._modules:
+                    tracker = self._modules["Tracking"].model
+                    if hasattr(tracker, "suppress_draw"):
+                        tracker.suppress_draw = False
+                        logger.info("[NMN] suppress_draw reset on Tracking model")
 
         # Security ← Tracking
         if "Security" in self._modules:
@@ -437,58 +467,106 @@ def bridge_attendance_tracking(
     model: Any,
 ) -> np.ndarray:
     """
-    Attendance guided by Tracking.
+    Attendance guided by Tracking — unified bounding-box mode.
 
-    Instead of running face recognition on the entire 640×480 frame, we crop
-    each tracked person's bounding box (padded upward to include the head),
-    run attendance on that crop, and paste the annotated crop back.
+    Behaviour
+    ---------
+    • The tracker body box stays; face boxes drawn by attendance are SUPPRESSED.
+    • The body box label shows the recognised name (green) or "UNKNOWN" (orange).
+    • Once a track ID is identified, that name STICKS for the rest of the session
+      via id_to_name_memory stored on the DynamicNMN instance — because the
+      attendance model only fires once per person (marked_names dedup).
 
-    Why this is faster / more accurate
-    -----------------------------------
-    • Face detector sees a tight crop → fewer false positives from background.
-    • InsightFace embedding runs on ~100×150 px instead of 640×480 → ~18× less
-      pixel area per person when there are several people in frame.
-    • Falls back to full-frame processing if tracking context is absent.
+    Falls back to full-frame attendance if no tracked boxes are available.
     """
-    tracked_boxes: List[Tuple] = ctx.get("tracked_boxes", [])
+    tracked_boxes = ctx.get("tracked_boxes", [])
 
     if not tracked_boxes:
-        # No tracking data yet (first few frames) — run normally
         return model.process(frame)
 
-    result = frame.copy()
-    processed_any = False
+    # ── Suppress tracker ID labels — bridge will draw names instead ──────────
+    tracker_model = ctx.get("_tracker_model")
+    if tracker_model is not None:
+        tracker_model.suppress_draw = True
 
-    for box in tracked_boxes:
+    # ── Grab the persistent memory dict from the NMN instance ────────────────
+    # Injected into ctx by the wrapper closure in _install_bridges.
+    memory: dict = ctx.get("_id_to_name_memory")  # track_id → name, persists across frames
+    if memory is None:
+        memory = {}  # safety fallback (should never happen)
+
+    # ── Parse tracked box entries ─────────────────────────────────────────────
+    def _parse_entry(entry):
+        if len(entry) == 2:
+            tid, coords = entry
+            return int(tid), *map(int, coords)
+        x1, y1, x2, y2 = map(int, entry[:4])
+        tid = int(entry[4]) if len(entry) > 4 else -1
+        return tid, x1, y1, x2, y2
+
+    active_ids = set()
+
+    for entry in tracked_boxes:
         try:
-            x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
-            h   = y2 - y1
-            w   = x2 - x1
-            # Extend upward by one head-height to ensure the face is in crop
-            pad_top = int(h * 0.5)
-            pad_side = int(w * 0.1)
-
-            cy1 = max(0, y1 - pad_top)
-            cy2 = min(frame.shape[0], y2)
-            cx1 = max(0, x1 - pad_side)
-            cx2 = min(frame.shape[1], x2 + pad_side)
-
-            if (cx2 - cx1) < 40 or (cy2 - cy1) < 40:
-                continue   # crop too small for face recognition
-
-            crop          = frame[cy1:cy2, cx1:cx2]
-            annotated     = model.process(crop)
-            if annotated is not None:
-                result[cy1:cy2, cx1:cx2] = annotated
-                processed_any = True
-
+            track_id, x1, y1, x2, y2 = _parse_entry(entry)
         except Exception as exc:
-            logger.debug("[NMN] attendance_bridge box error: %s", exc)
+            logger.debug("[NMN] attendance_bridge parse error: %s", exc)
             continue
 
-    if not processed_any:
-        # Every crop was too small or failed — full-frame fallback
-        return model.process(frame)
+        active_ids.add(track_id)
+
+        # ── Already identified this track — skip recognition, keep name ──────
+        if track_id in memory:
+            continue
+
+        # ── Crop the head region for face recognition ─────────────────────────
+        h, w = y2 - y1, x2 - x1
+        pad_top  = int(h * 0.5)
+        pad_side = int(w * 0.1)
+        cy1 = max(0, y1 - pad_top)
+        cy2 = min(frame.shape[0], y2)
+        cx1 = max(0, x1 - pad_side)
+        cx2 = min(frame.shape[1], x2 + pad_side)
+
+        if (cx2 - cx1) < 40 or (cy2 - cy1) < 40:
+            continue  # crop too small — leave unidentified for now
+
+        # ── Run attendance on throw-away crop — only care about the log ───────
+        crop_copy = frame[cy1:cy2, cx1:cx2].copy()
+        before_count = len(model.get_results())
+        model.process(crop_copy)
+        after_results = model.get_results()
+
+        if len(after_results) > before_count:
+            # New recognition fired — lock this track ID to that name permanently
+            recognised_name = after_results[-1]["name"].upper()
+            memory[track_id] = recognised_name
+            logger.debug("[NMN] Track %s identified as %s", track_id, recognised_name)
+
+    # ── Purge IDs that are no longer tracked (track lost / left frame) ────────
+    stale = [tid for tid in memory if tid not in active_ids]
+    for tid in stale:
+        del memory[tid]
+
+    # ── Store resolved mapping in ctx for other modules ───────────────────────
+    ctx.set("id_to_name", dict(memory))
+
+    # ── Redraw body boxes with names ──────────────────────────────────────────
+    result = frame.copy()
+    for entry in tracked_boxes:
+        try:
+            track_id, x1, y1, x2, y2 = _parse_entry(entry)
+        except Exception:
+            continue
+
+        name  = memory.get(track_id, "UNKNOWN")
+        color = (0, 255, 0) if name != "UNKNOWN" else (0, 165, 255)  # green / orange
+
+        cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(
+            result, name, (x1, y1 - 6),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.60, color, 2,
+        )
 
     return result
 
@@ -563,25 +641,10 @@ def tracking_extractor(
     model: Any,
 ) -> Optional[List[Tuple]]:
     """
-    Pull bounding boxes from HumanTracker's internal state.
+    Pull bounding boxes + IDs from HumanTracker's internal state.
 
-    Requires HumanTracker to expose:
-        get_tracks() → List[Tuple[x1, y1, x2, y2, track_id]]
-
-    If the method is absent, returns an empty list (no cross-module benefit,
-    but nothing breaks — other modules just skip context-guided paths).
-
-    HOW TO ADD get_tracks() TO YOUR HumanTracker
-    ---------------------------------------------
-    In human_tracking.py, keep a list that is populated inside process():
-
-        self._last_tracks = []   # in __init__
-
-        # at the end of process(), after YOLO/ByteTrack returns boxes:
-        self._last_tracks = [(x1, y1, x2, y2, tid) for (x1,y1,x2,y2,tid) in track_results]
-
-        def get_tracks(self):
-            return list(self._last_tracks)   # shallow copy for thread safety
+    get_tracks() returns List[Tuple[track_id, [x1,y1,x2,y2]]].
+    The bridge_attendance_tracking function reads entries in this format.
     """
     try:
         if hasattr(model, "get_tracks"):

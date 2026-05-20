@@ -129,6 +129,7 @@ class HumanTracker:
         self.lost        = []
         self.next_id     = 1
         self.last_tracks = []
+        self.suppress_draw = False   # set True by NMN bridge to skip ID labels
 
     def _detect(self, frame: np.ndarray):
         results = self.detector(frame, conf=self.LOW_CONF, classes=[0], verbose=False)[0]
@@ -317,8 +318,17 @@ class HumanTracker:
             x1, y1, x2, y2 = map(int, box)
             output.append((t.id, [x1, y1, x2, y2]))
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, f"ID {t.id}", (x1, y1 - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
+            # When suppress_draw is True the NMN attendance bridge will
+            # overdraw the label with the recognised person's name instead.
+            if not self.suppress_draw:
+                cv2.putText(frame, f"ID {t.id}", (x1, y1 - 6),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
 
         self.last_tracks = output
         return frame
+
+    def get_tracks(self) -> list:
+        """Return a shallow copy of the last confirmed track list.
+        Each entry is (track_id, [x1, y1, x2, y2]).
+        Used by NMN context extractor so downstream modules can read boxes."""
+        return list(self.last_tracks)

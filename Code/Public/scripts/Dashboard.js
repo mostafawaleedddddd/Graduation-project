@@ -1056,11 +1056,8 @@ function isAttendanceAlone() {
 
 /* ─── "Classes" button on block ─── */
 function openAttendanceClassesDropdown(blockId) {
-  if (!isAttendanceAlone()) {
-    // When combined in a pipeline — original behaviour
-    uploadAttendanceImages();
-    return;
-  }
+  // Always show the full class manager — both standalone Attendance
+  // and Tracking+Attendance pipelines need class selection.
   _attPendingBlockId = blockId;
   openAttendanceClassDropdownMenu(blockId);
 }
