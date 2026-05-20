@@ -411,7 +411,7 @@ class LiveStreamServer:
                 if jpeg_bytes:
                     await websocket.send_bytes(jpeg_bytes)
 
-                await asyncio.sleep(1 / 30)
+                await asyncio.sleep(0)
 
         except (WebSocketDisconnect, Exception):
             pass
