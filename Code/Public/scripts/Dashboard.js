@@ -2010,12 +2010,101 @@ applyPipelineToCamera = async function(pipeline, cameraIds) {
   }
 };
 
-/* ── Also stop polling when a block is deleted from the canvas ── */
-const _origDeleteBlock = deleteBlock;
-deleteBlock = function(id) {
-  _origDeleteBlock(id);
-  const pipeline = Array.from(blocks.values()).map(b => b.type);
-  if (!pipeline.includes('Fire & Smoke Detection')) {
-    stopFirePolling();
+/* ═══════════════════════════════════════════════════════════════
+   SHELF-GAP ALERT SYSTEM
+   Polls /shelf_gap_alert_status every 2 seconds while the pipeline
+   contains both "Object Counting" and "Gap Detection".
+   Shows a modal popup (styled like the Attendance List modal)
+   when gaps >= half of products detected.
+════════════════════════════════════════════════════════════════ */
+
+let _shelfGapPollingTimer = null;   // setInterval handle
+let _shelfGapDismissed    = false;  // true while popup is open / user dismissed
+
+/* ── Start polling when Gap Detection + Object Counting are both in pipeline ── */
+function startShelfGapPolling() {
+  if (_shelfGapPollingTimer !== null) return;
+  _shelfGapDismissed = false;
+  _shelfGapPollingTimer = setInterval(_pollShelfGapStatus, 2000);
+  console.log('[ShelfGap] Polling started');
+}
+
+/* ── Stop polling (pipeline changed) ── */
+function stopShelfGapPolling() {
+  if (_shelfGapPollingTimer === null) return;
+  clearInterval(_shelfGapPollingTimer);
+  _shelfGapPollingTimer = null;
+  _hideShelfGapModal();
+  console.log('[ShelfGap] Polling stopped');
+}
+
+/* ── Single poll cycle ── */
+async function _pollShelfGapStatus() {
+  try {
+    const res  = await fetch('http://127.0.0.1:5000/shelf_gap_alert_status');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data.alert && !_shelfGapDismissed) {
+      _showShelfGapModal(data.product_count, data.gap_count);
+    } else if (!data.alert) {
+      // Alert cleared on server side — re-arm
+      _shelfGapDismissed = false;
+    }
+  } catch (_) {
+    // Server unreachable — skip tick
+  }
+}
+
+/* ── Show the shelf gap modal ── */
+function _showShelfGapModal(productCount, gapCount) {
+  const modal = document.getElementById('shelfGapAlertModal');
+  if (!modal || modal.classList.contains('show')) return;
+
+  const cameraLabel = cameraDropdownLabel
+    ? cameraDropdownLabel.textContent.trim()
+    : (currentCameraId || 'Unknown Camera');
+
+  document.getElementById('shelfGapCameraName').textContent  = cameraLabel;
+  document.getElementById('shelfGapProductCount').textContent = productCount;
+  document.getElementById('shelfGapGapCount').textContent    = gapCount;
+
+  const now = new Date();
+  document.getElementById('shelfGapTimestamp').textContent =
+    now.toTimeString().slice(0, 8);
+
+  modal.classList.add('show');
+  _shelfGapDismissed = true;
+}
+
+/* ── Dismiss handler (OK button) ── */
+async function dismissShelfGapModal() {
+  _hideShelfGapModal();
+  try {
+    await fetch('http://127.0.0.1:5000/shelf_gap_alert_dismiss', { method: 'POST' });
+  } catch (_) {}
+}
+
+function _hideShelfGapModal() {
+  const modal = document.getElementById('shelfGapAlertModal');
+  if (modal) modal.classList.remove('show');
+}
+
+/* ── Hook into applyPipelineToCamera to auto start/stop polling ── */
+const _origApplyPipelineShelf = applyPipelineToCamera;
+applyPipelineToCamera = async function(pipeline, cameraIds) {
+  await _origApplyPipelineShelf(pipeline, cameraIds);
+
+  const needsShelf = pipeline.includes('Object Counting') &&
+                     pipeline.includes('Gap Detection');
+  if (needsShelf) {
+    startShelfGapPolling();
+  } else {
+    const anyShelfActive = Object.values(cameraPipelines).some(
+      p => Array.isArray(p) &&
+           p.includes('Object Counting') &&
+           p.includes('Gap Detection')
+    );
+    if (!anyShelfActive) stopShelfGapPolling();
   }
 };

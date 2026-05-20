@@ -117,6 +117,11 @@ class ShelfOrchestrator:
             iou=self.cfg.gap_iou
         )
 
+        # ── Alert state ──────────────────────────────────────────────────────
+        self._last_product_count: int = 0
+        self._last_gap_count: int     = 0
+        self._gap_alert: bool         = False   # True when gaps >= half products
+
     def _suppress(self, products, gaps):
         surviving = []
 
@@ -169,10 +174,38 @@ class ShelfOrchestrator:
                 self.cfg.thickness
             )
 
+        n_products = len(surviving_products)
+        n_gaps     = len(gap_boxes)
+
+        self._last_product_count = n_products
+        self._last_gap_count     = n_gaps
+
+        # Alert fires when gaps are >= half the surviving product count
+        # (and there is at least one gap and one product on shelf)
+        if n_products > 0 and n_gaps >= n_products / 2:
+            self._gap_alert = True
+        else:
+            self._gap_alert = False
+
         print(
             f"Products: {len(product_boxes)} | "
-            f"After suppression: {len(surviving_products)} | "
-            f"Gaps: {len(gap_boxes)}"
+            f"After suppression: {n_products} | "
+            f"Gaps: {n_gaps} | "
+            f"Alert: {self._gap_alert}"
         )
 
         return out
+
+    # ── Public status accessors (called by Server.py route) ──────────────────
+
+    def get_alert_status(self) -> dict:
+        """Return current shelf-gap alert state for the frontend to poll."""
+        return {
+            "alert":         self._gap_alert,
+            "product_count": self._last_product_count,
+            "gap_count":     self._last_gap_count,
+        }
+
+    def reset_alert(self):
+        """Dismiss the alert (called after the user clicks OK on the popup)."""
+        self._gap_alert = False

@@ -264,77 +264,43 @@
         <button class="fire-toast-dismiss" onclick="dismissFireToast('smoke')" title="Dismiss">✕</button>
     </div>
 
-    <style>
-        /* ── Fire toast (no modal overlay, no blur) ── */
-        .fire-toast {
-            position: fixed;
-            top: 72px;       /* below navbar */
-            right: 20px;
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 16px 14px 14px;
-            border-radius: 10px;
-            min-width: 280px;
-            max-width: 360px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.55);
-            animation: fireToastIn 0.3s ease;
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-        .fire-toast + .fire-toast {
-            top: 148px;   /* stack second toast below first */
-        }
-        .fire-toast--fire {
-            background: linear-gradient(135deg, #7a1a00 0%, #c0380a 100%);
-            color: #fff;
-        }
-        .fire-toast--smoke {
-            background: linear-gradient(135deg, #2a2a2a 0%, #4a4a4a 100%);
-            color: #ddd;
-        }
-        .fire-toast-icon {
-            font-size: 28px;
-            flex-shrink: 0;
-            animation: fireIconPulse 1s ease-in-out infinite alternate;
-        }
-        .fire-toast-body {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            flex: 1;
-        }
-        .fire-toast-title {
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-        }
-        .fire-toast-sub {
-            font-size: 12px;
-            opacity: 0.8;
-        }
-        .fire-toast-dismiss {
-            background: none;
-            border: none;
-            color: inherit;
-            cursor: pointer;
-            font-size: 16px;
-            opacity: 0.65;
-            padding: 2px 4px;
-            flex-shrink: 0;
-            transition: opacity 0.15s;
-        }
-        .fire-toast-dismiss:hover { opacity: 1; }
 
-        @keyframes fireToastIn {
-            from { opacity: 0; transform: translateX(40px); }
-            to   { opacity: 1; transform: translateX(0);    }
-        }
-        @keyframes fireIconPulse {
-            from { transform: scale(1);    }
-            to   { transform: scale(1.15); }
-        }
-    </style>
+    <!-- ═══════════════════════════════════════════════
+         SHELF-GAP ALERT MODAL
+         Shown when gaps detected >= half of products.
+         Styled to match the Attendance List popup.
+    ════════════════════════════════════════════════ -->
+    <div id="shelfGapAlertModal" class="modal-overlay shelf-gap-modal-overlay">
+        <div class="modal-content window-panel shelf-gap-modal-content">
+            <button type="button" class="close-btn window-close" onclick="dismissShelfGapModal()">&times;</button>
+            <h3 class="shelf-gap-modal-title">🧱 SHELF GAP ALERT</h3>
+
+            <div class="shelf-gap-modal-body">
+                <div class="shelf-gap-row">
+                    <span class="shelf-gap-camera" id="shelfGapCameraName">Camera</span>
+                    <span class="shelf-gap-time"   id="shelfGapTimestamp">--:--:--</span>
+                </div>
+                <div class="shelf-gap-stats">
+                    <div class="shelf-gap-stat">
+                        <span class="shelf-gap-stat-label">Products</span>
+                        <span class="shelf-gap-stat-value" id="shelfGapProductCount">0</span>
+                    </div>
+                    <div class="shelf-gap-stat-divider"></div>
+                    <div class="shelf-gap-stat">
+                        <span class="shelf-gap-stat-label">Gaps</span>
+                        <span class="shelf-gap-stat-value shelf-gap-stat-value--red" id="shelfGapGapCount">0</span>
+                    </div>
+                </div>
+                <p class="shelf-gap-description">
+                    Gaps detected ≥ half of visible products. Shelf restock may be required.
+                </p>
+            </div>
+
+            <div class="action-buttons window-actions">
+                <button type="button" class="btn-primary" onclick="dismissShelfGapModal()">OK</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/scripts/Dashboard.js"></script>
 </body>

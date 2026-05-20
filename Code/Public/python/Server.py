@@ -783,6 +783,32 @@ class LiveStreamServer:
                 "alert_email": email,
             }
 
+        # ═══════════════════════════════════════════════════════════════
+        #  SHELF-GAP ALERT ENDPOINTS
+        #  Polled by Dashboard.js when the Shelf Orchestrator pipeline
+        #  (Object Counting + Gap Detection) is active.
+        # ═══════════════════════════════════════════════════════════════
+
+        @self.app.get("/shelf_gap_alert_status")
+        async def shelf_gap_alert_status():
+            """Return current gap-alert state from ShelfOrchestrator."""
+            try:
+                status = self.shelf_orchestrator.get_alert_status()
+                return JSONResponse(status)
+            except Exception as exc:
+                print("❌ shelf_gap_alert_status error:", exc)
+                return JSONResponse({}, status_code=500)
+
+        @self.app.post("/shelf_gap_alert_dismiss")
+        async def shelf_gap_alert_dismiss():
+            """Called when the user presses OK on the frontend popup."""
+            try:
+                self.shelf_orchestrator.reset_alert()
+                return JSONResponse({"status": "ok"})
+            except Exception as exc:
+                print("❌ shelf_gap_alert_dismiss error:", exc)
+                return JSONResponse({}, status_code=500)
+
         @self.app.get("/fire_alert_status")
         async def fire_alert_status():
             """Return current fire/smoke alert status from the active detector.
