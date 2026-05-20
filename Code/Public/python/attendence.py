@@ -76,6 +76,7 @@ class AttendanceSystem:
 
         self.marked_names = set()
         self.attendance_log = []
+        self.last_attendance_info = {"recognitions": []}
 
         if not os.path.exists(self.dataset_path):
             os.makedirs(self.dataset_path)
@@ -154,7 +155,7 @@ class AttendanceSystem:
     # MAIN PROCESS
     # =========================================================
 
-    def process(self, frame: np.ndarray):
+    def process(self, frame: np.ndarray, force: bool = False):
 
         if self._centroid_matrix is None:
             return frame
@@ -168,10 +169,10 @@ class AttendanceSystem:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         # =====================================================
-        # DETECT ONLY EVERY N FRAMES
+        # DETECT ONLY EVERY N FRAMES, OR WHEN FORCED
         # =====================================================
 
-        if self.frame_count % self.frame_skip == 0:
+        if force or self.frame_count % self.frame_skip == 0:
 
             faces = self.app.get(rgb)
 
@@ -185,6 +186,7 @@ class AttendanceSystem:
         # FACE RECOGNITION
         # =====================================================
 
+        recognitions = []
         for face in faces:
 
             x1, y1, x2, y2 = map(int, face.bbox)
@@ -211,6 +213,12 @@ class AttendanceSystem:
 
                 color = (0, 0, 255)
 
+            recognitions.append({
+                "name": name,
+                "score": float(best_score),
+                "box": [x1, y1, x2, y2],
+            })
+
             # =================================================
             # DRAW
             # =================================================
@@ -233,6 +241,7 @@ class AttendanceSystem:
                 2,
             )
 
+        self.last_attendance_info = {"recognitions": recognitions}
         return frame
 
     # =========================================================

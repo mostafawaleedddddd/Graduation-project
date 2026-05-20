@@ -618,7 +618,9 @@ async function uploadProject() {
     // ================= VALIDATION RULES =================
     const allowedExact = [
       ["Object Counting", "Gap Detection"],
-      ["Tracking", "Attendance"]
+      ["Tracking", "Attendance"],
+      ["Security", "Attendance"],
+      ["Smart Security", "Tracking"]
     ];
 
     const isSingle = pipeline.length === 1;

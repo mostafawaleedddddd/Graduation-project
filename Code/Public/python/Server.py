@@ -29,6 +29,8 @@ from NMN import (
     DynamicNMN,
     tracking_extractor,
     object_count_extractor,
+    attendance_extractor,
+    SmartSecurityGuard   
 )
 
 # ─── Thread pool for JPEG encoding (keeps async loop free) ───────────────────
@@ -78,8 +80,10 @@ SKIP_N       = 2
 NMN_TRIGGER_SETS = [
     {"Attendance", "Tracking"},           
     {"Security",   "Tracking"},           
+    {"Security",   "Attendance"},
     {"Heatmap",    "Tracking"},           
     {"Attendance", "Security", "Tracking"},
+    {"Smart Security", "Tracking"}
     
 ]
 
@@ -149,7 +153,7 @@ class LiveStreamServer:
             "Attendance",
             self.attendance,
             raw_process_fn=self.attendance.process,
-            # No extract_fn needed — Attendance is a consumer, not a producer.
+            context_extract_fn=attendance_extractor,
         )
 
         self.nmn.register(
@@ -189,7 +193,13 @@ class LiveStreamServer:
             self.parking_model,
             raw_process_fn=self.parking_model.process,
         )
-
+        self.smart_security_guard = SmartSecurityGuard(enable_email_alerts=True)
+        self.nmn.register(
+                "Smart Security",
+            self.smart_security_guard,
+            raw_process_fn=self.smart_security_guard.process,
+        )
+        
         print("✅ NMN ready — all modules registered.")
 
         # ================= 3. ATOMIC FRAME STORES =================
@@ -767,6 +777,7 @@ class LiveStreamServer:
             data  = await request.json()
             email = data.get("email") or None
             self.security.set_receiver_email(email)
+            self.smart_security_guard.set_receiver_email(email)
             return {
                 "status":      "ok",
                 "alert_email": email,

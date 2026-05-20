@@ -21,6 +21,7 @@ INFERENCE_IMAGE_SIZE = 416
 INFERENCE_EVERY_N_FRAMES = 2
 EMAIL_JPEG_QUALITY = 95
 ALERT_RESET_FRAMES = 45  # Reset alert after 45 frames of no detection
+UNKNOWN_ALERT_SECONDS = 5.0  # Require 5 consecutive seconds of unknowns before alerting
 
 
 def send_security_alert_async(people_count=1, frame=None, receiver_email=None):
@@ -104,6 +105,8 @@ class SecuritySystem:
         self.alert_active           = False
         self.missing_person_frames  = 0
         self.absence_reset_frames   = ALERT_RESET_FRAMES
+        self.unknown_alert_start    = None
+        self.unknown_alert_sent     = False
         self.last_frame_time        = perf_counter()
         self.current_fps            = 0.0
         self.frame_counter          = 0
@@ -219,17 +222,10 @@ class SecuritySystem:
             "message":      f"Security alert: {person_count} person(s) detected",
         })
 
-    def process(self, frame):
-        """
-        Process frame for security threats.
-
-        Returns:
-            Annotated frame with detections and alerts
-        """
+    def _run_detection(self, frame):
         self._update_fps()
         self.frame_counter += 1
 
-        # ================= RUN INFERENCE =================
         should_infer = (
             self.last_results is None
             or self.frame_counter % INFERENCE_EVERY_N_FRAMES == 0
@@ -239,9 +235,8 @@ class SecuritySystem:
 
         results = self.last_results
 
-        # ================= PARSE DETECTIONS =================
-        detections   = sv.Detections.from_ultralytics(results[0])
-        labels       = []
+        detections = sv.Detections.from_ultralytics(results[0])
+        labels = []
         person_count = 0
 
         if results[0].boxes is not None and results[0].boxes.cls is not None:
@@ -252,26 +247,24 @@ class SecuritySystem:
                     person_count += 1
                     labels.append(f"person {confidence:.2f}")
 
-        # ================= ALERT LOGIC =================
+        return frame, detections, labels, person_count
+
+    def _finalize_frame(self, frame, detections, labels, person_count, allow_email=True):
         if person_count > 0:
             self.missing_person_frames = 0
             self._log_detection(person_count)
 
-            if not self.alert_active:
-                # New intrusion — fire email to the current user's address
-                if self.enable_email_alerts:
-                    alert_frame = self._annotate_frame(
-                        frame, detections, labels, person_count
-                    )
-                    Thread(
-                        target=send_security_alert_async,
-                        kwargs={
-                            "people_count":   person_count,
-                            "frame":          alert_frame.copy(),
-                            "receiver_email": self.receiver_email,  # ← dynamic
-                        },
-                        daemon=True,
-                    ).start()
+            if not self.alert_active and allow_email and self.enable_email_alerts:
+                alert_frame = self._annotate_frame(frame, detections, labels, person_count)
+                Thread(
+                    target=send_security_alert_async,
+                    kwargs={
+                        "people_count":   person_count,
+                        "frame":          alert_frame.copy(),
+                        "receiver_email": self.receiver_email,
+                    },
+                    daemon=True,
+                ).start()
 
                 self._log_alert(person_count)
                 self.alert_active = True
@@ -286,8 +279,50 @@ class SecuritySystem:
                 self.missing_person_frames = 0
                 print("✅ Scene cleared. Ready for next detection.")
 
-        # ================= DRAW FRAME =================
         return self._annotate_frame(frame, detections, labels, person_count)
+
+    def process(self, frame):
+        frame, detections, labels, person_count = self._run_detection(frame)
+        return self._finalize_frame(frame, detections, labels, person_count, allow_email=True)
+
+    def process_with_context(self, frame, tracked_boxes, attendance_info):
+        if not attendance_info:
+            self.unknown_alert_start = None
+            self.unknown_alert_sent = False
+            return self.process(frame)
+
+        recognitions = attendance_info.get("recognitions", [])
+        has_known = any(rec.get("name") != "UNKNOWN" for rec in recognitions)
+        has_unknown = any(rec.get("name") == "UNKNOWN" for rec in recognitions)
+
+        if has_known:
+            self.unknown_alert_start = None
+            self.unknown_alert_sent = False
+            allow_email = False
+        elif has_unknown:
+            now = perf_counter()
+            if self.unknown_alert_start is None:
+                self.unknown_alert_start = now
+            elapsed = now - self.unknown_alert_start
+            allow_email = elapsed >= UNKNOWN_ALERT_SECONDS and not self.unknown_alert_sent
+            if allow_email:
+                self.unknown_alert_sent = True
+        else:
+            self.unknown_alert_start = None
+            self.unknown_alert_sent = False
+            allow_email = False
+
+        frame, detections, labels, person_count = self._run_detection(frame)
+        result = self._finalize_frame(frame, detections, labels, person_count, allow_email=allow_email)
+
+        if has_known and self.alert_active:
+            self.alert_active = False
+
+        if person_count == 0:
+            self.unknown_alert_start = None
+            self.unknown_alert_sent = False
+
+        return result
 
     def get_results(self):
         """Get security detection log."""

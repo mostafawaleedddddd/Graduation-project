@@ -64,6 +64,7 @@ import threading
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import cv2
@@ -85,9 +86,11 @@ MODULE_DEPS: Dict[str, List[str]] = {
     "Parking Management": [],
     # ── consumers (depend on a producer's context) ───────────────────────────
     "Attendance":         ["Tracking"],         # ROI-guided face search
-    "Security":           ["Tracking"],         # focus on person regions
+    "Security":           ["Tracking", "Attendance"],
     "Heatmap":            ["Tracking"],         # centroid-driven accumulation
     "Gap Detection":      ["Object Counting"],  # gap logic enriched by counts
+    # ── Smart Security: needs Tracking for person ROIs and Attendance for ID ─
+    "Smart Security":     ["Tracking", "Attendance"],
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -98,6 +101,7 @@ MODULE_DEPS: Dict[str, List[str]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 CONTEXT_KEYS: Dict[str, str] = {
     "Tracking":        "tracked_boxes",   # List[Tuple[x1,y1,x2,y2,track_id]]
+    "Attendance":      "attendance_info", # Dict[str, Any] from the Attendance model
     "Object Counting": "object_counts",   # Dict[class_name, int]
     "Gap Detection":   "gap_regions",     # List[Tuple[x1,y1,x2,y2]]
 }
@@ -379,13 +383,19 @@ class DynamicNMN:
                         tracker.suppress_draw = False
                         logger.info("[NMN] suppress_draw reset on Tracking model")
 
-        # Security ← Tracking
+        # Security ← Tracking / Attendance
         if "Security" in self._modules:
-            bridge = bridge_security_tracking \
-                if ("Security" in active and "Tracking" in active) else None
+            bridge = None
+            if "Security" in active:
+                if "Tracking" in active and "Attendance" in active:
+                    bridge = bridge_security_tracking_and_attendance
+                elif "Tracking" in active:
+                    bridge = bridge_security_tracking
+                elif "Attendance" in active:
+                    bridge = bridge_security_attendance
             self._modules["Security"].set_bridge(bridge)
             if bridge:
-                logger.info("[NMN] Bridge installed: Security ← Tracking")
+                logger.info("[NMN] Bridge installed: Security ← Tracking/Attendance")
 
         # Heatmap ← Tracking
         if "Heatmap" in self._modules:
@@ -398,6 +408,20 @@ class DynamicNMN:
         # Gap Detection ← Object Counting  (context only, no visual bridge needed)
         # The context extractor on Object Counting already writes "object_counts"
         # which GapDetector can read if it checks ctx.get("object_counts").
+
+        # Smart Security ← Tracking + Attendance
+        # Needs both upstream modules to be active for full functionality.
+        # Works in degraded mode (all unknown) if only Tracking is active.
+        if "Smart Security" in self._modules:
+            if "Smart Security" in active and "Tracking" in active:
+                self._modules["Smart Security"].set_bridge(bridge_smart_security)
+                logger.info("[NMN] Bridge installed: Smart Security ← Tracking + Attendance")
+            else:
+                self._modules["Smart Security"].set_bridge(None)
+                # Reset the guard's timer state when it leaves the pipeline
+                guard = self._modules["Smart Security"].model
+                if guard is not None and hasattr(guard, "reset"):
+                    guard.reset()
 
     # ── Parallel stage execution ──────────────────────────────────────────────
 
@@ -531,17 +555,16 @@ def bridge_attendance_tracking(
         if (cx2 - cx1) < 40 or (cy2 - cy1) < 40:
             continue  # crop too small — leave unidentified for now
 
-        # ── Run attendance on throw-away crop — only care about the log ───────
+        # ── Run attendance on throw-away crop and inspect latest recognition
         crop_copy = frame[cy1:cy2, cx1:cx2].copy()
-        before_count = len(model.get_results())
-        model.process(crop_copy)
-        after_results = model.get_results()
+        model.process(crop_copy, force=True)
+        recognitions = getattr(model, "last_attendance_info", {}).get("recognitions", [])
 
-        if len(after_results) > before_count:
-            # New recognition fired — lock this track ID to that name permanently
-            recognised_name = after_results[-1]["name"].upper()
-            memory[track_id] = recognised_name
-            logger.debug("[NMN] Track %s identified as %s", track_id, recognised_name)
+        if recognitions:
+            recognised_name = recognitions[-1].get("name", "UNKNOWN").upper()
+            if recognised_name != "UNKNOWN":
+                memory[track_id] = recognised_name
+                logger.debug("[NMN] Track %s identified as %s", track_id, recognised_name)
 
     # ── Purge IDs that are no longer tracked (track lost / left frame) ────────
     stale = [tid for tid in memory if tid not in active_ids]
@@ -593,6 +616,67 @@ def bridge_security_tracking(
             logger.debug("[NMN] security_bridge process_with_rois failed: %s", exc)
 
     # Graceful fallback: tracking annotations already on frame from Stage 0
+    return model.process(frame)
+
+
+def bridge_security_attendance(
+    frame: np.ndarray,
+    ctx: FrameContext,
+    model: Any,
+) -> np.ndarray:
+    """
+    Security guided by Attendance.
+
+    If the security model exposes process_with_context or
+    process_with_attendance, pass the attendance results through.
+    Otherwise fall back to the standard Security.process() path.
+    """
+    attendance_info = ctx.get("attendance_info", {})
+
+    if hasattr(model, "process_with_context"):
+        try:
+            return model.process_with_context(frame, [], attendance_info)
+        except Exception as exc:
+            logger.debug("[NMN] security_bridge_attendance process_with_context failed: %s", exc)
+
+    if hasattr(model, "process_with_attendance"):
+        try:
+            return model.process_with_attendance(frame, attendance_info)
+        except Exception as exc:
+            logger.debug("[NMN] security_bridge_attendance process_with_attendance failed: %s", exc)
+
+    return model.process(frame)
+
+
+def bridge_security_tracking_and_attendance(
+    frame: np.ndarray,
+    ctx: FrameContext,
+    model: Any,
+) -> np.ndarray:
+    """
+    Security guided by both Tracking and Attendance.
+    """
+    tracked_boxes = ctx.get("tracked_boxes", [])
+    attendance_info = ctx.get("attendance_info", {})
+
+    if hasattr(model, "process_with_context"):
+        try:
+            return model.process_with_context(frame, tracked_boxes, attendance_info)
+        except Exception as exc:
+            logger.debug("[NMN] security_bridge_combined process_with_context failed: %s", exc)
+
+    if hasattr(model, "process_with_attendance"):
+        try:
+            return model.process_with_attendance(frame, attendance_info)
+        except Exception as exc:
+            logger.debug("[NMN] security_bridge_combined process_with_attendance failed: %s", exc)
+
+    if tracked_boxes and hasattr(model, "process_with_rois"):
+        try:
+            return model.process_with_rois(frame, tracked_boxes)
+        except Exception as exc:
+            logger.debug("[NMN] security_bridge_combined process_with_rois failed: %s", exc)
+
     return model.process(frame)
 
 
@@ -675,6 +759,21 @@ def object_count_extractor(
     return {}
 
 
+def attendance_extractor(
+    result_frame: np.ndarray,
+    ctx: FrameContext,
+    model: Any,
+) -> Dict[str, Any]:
+    """
+    Extract the latest attendance recognition results from the Attendance model.
+    """
+    try:
+        return getattr(model, "last_attendance_info", {}) or {}
+    except Exception as exc:
+        logger.debug("[NMN] attendance_extractor failed: %s", exc)
+    return {}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # §8  FRAME COMPOSITING
 #     Merges annotation layers from parallel modules without doubling
@@ -718,3 +817,257 @@ def _composite_overlay(
 
 def _now() -> float:
     return time.perf_counter()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §9  SMART SECURITY GUARD
+#
+#     A lightweight state machine that sits on top of the Attendance model.
+#     It reuses the face-recognition work already done by the Attendance bridge
+#     (id_to_name_memory) and adds:
+#
+#       • Per-track UNKNOWN timers  — a person must be continuously unrecognised
+#         for UNKNOWN_ALERT_SECONDS before an alert fires.
+#       • One-shot alerting         — once an alert has been sent for a given
+#         intrusion window, no second email is sent until the person leaves and
+#         re-enters (track ID disappears from the scene and comes back).
+#       • Graceful fallback         — if Attendance context is absent the guard
+#         treats every tracked person as UNKNOWN (fail-secure).
+#       • Thread-safe               — all mutable state is protected by a lock
+#         so the guard can be called from the NMN thread pool.
+#
+#     The guard does NOT load any model — it reads the id_to_name_memory dict
+#     that bridge_attendance_tracking already maintains and calls
+#     send_security_alert_async from security.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+UNKNOWN_ALERT_SECONDS: float = 5.0   # consecutive seconds before alert fires
+
+
+class SmartSecurityGuard:
+    """
+    Fuses Attendance recognition with time-gated, one-shot intrusion alerting.
+
+    Registration (Server.py)
+    ------------------------
+        guard = SmartSecurityGuard(receiver_email=user_email)
+        nmn.register(
+            "Smart Security",
+            guard,
+            raw_process_fn=guard.process,
+        )
+        # Add "Smart Security" to NMN_TRIGGER_SETS as needed.
+
+    The guard's process() is normally called via bridge_smart_security (below),
+    which injects Tracking + Attendance context before the call.
+    """
+
+    def __init__(
+        self,
+        receiver_email: str | None = None,
+        unknown_alert_seconds: float = UNKNOWN_ALERT_SECONDS,
+        enable_email_alerts: bool = True,
+    ):
+        self.receiver_email        = receiver_email
+        self.unknown_alert_seconds = unknown_alert_seconds
+        self.enable_email_alerts   = enable_email_alerts
+
+        # track_id → wall-clock time when this track first became UNKNOWN
+        self._unknown_since: Dict[int, float] = {}
+
+        # track_id → True once an alert has been sent for this intrusion window
+        self._alerted: Dict[int, bool] = {}
+
+        self._lock = threading.Lock()
+
+        # Public log (mirrors SecuritySystem.alert_log style)
+        self.alert_log: deque = deque(maxlen=100)
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def set_receiver_email(self, email: str | None) -> None:
+        self.receiver_email = email
+        logger.info("[SmartSecurity] Alert recipient: %s", email or "none")
+
+    def get_results(self) -> list:
+        with self._lock:
+            return list(self.alert_log)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._unknown_since.clear()
+            self._alerted.clear()
+            self.alert_log.clear()
+        logger.info("[SmartSecurity] State reset.")
+
+    # ── Core frame processor ──────────────────────────────────────────────────
+
+    def process(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Plain (bridge-less) fallback: no context available → treat all pixels
+        as a single unknown region, which is unhelpful.  In practice this is
+        always called via bridge_smart_security which injects context first.
+        """
+        return frame   # nothing to do without context
+
+    def process_with_context(
+        self,
+        frame: np.ndarray,
+        tracked_boxes: list,
+        id_to_name: Dict[int, str],
+    ) -> np.ndarray:
+        """
+        The real entry point, called by bridge_smart_security.
+
+        Parameters
+        ----------
+        frame        : current BGR frame (will be annotated in place on a copy)
+        tracked_boxes: list of (track_id, [x1,y1,x2,y2]) or (x1,y1,x2,y2,tid)
+        id_to_name   : mapping of track_id → recognised name (or absent = UNKNOWN)
+        """
+        now    = time.perf_counter()
+        result = frame.copy()
+
+        # ── Helper: parse heterogeneous box formats ───────────────────────────
+        def _parse(entry):
+            if len(entry) == 2:
+                tid, coords = entry
+                x1, y1, x2, y2 = map(int, coords)
+            else:
+                x1, y1, x2, y2 = map(int, entry[:4])
+                tid = int(entry[4]) if len(entry) > 4 else -1
+            return int(tid), x1, y1, x2, y2
+
+        active_ids: set = set()
+
+        with self._lock:
+            for entry in tracked_boxes:
+                try:
+                    tid, x1, y1, x2, y2 = _parse(entry)
+                except Exception as exc:
+                    logger.debug("[SmartSecurity] parse error: %s", exc)
+                    continue
+
+                active_ids.add(tid)
+
+                name      = id_to_name.get(tid, "UNKNOWN")
+                is_known  = (name != "UNKNOWN")
+
+                # ── KNOWN person: clear any pending unknown timer ─────────────
+                if is_known:
+                    self._unknown_since.pop(tid, None)
+                    self._alerted.pop(tid, None)
+                    color  = (0, 220, 0)
+                    label  = f"✓ {name}"
+
+                # ── UNKNOWN person: start / advance timer ─────────────────────
+                else:
+                    if tid not in self._unknown_since:
+                        self._unknown_since[tid] = now
+                        logger.debug("[SmartSecurity] Track %d: unknown timer started", tid)
+
+                    elapsed = now - self._unknown_since[tid]
+                    remaining = max(0.0, self.unknown_alert_seconds - elapsed)
+
+                    if elapsed >= self.unknown_alert_seconds:
+                        color = (0, 0, 255)         # red — alert threshold reached
+                        label = "⚠ INTRUDER"
+
+                        # One-shot: fire only once per intrusion window
+                        if not self._alerted.get(tid, False):
+                            self._alerted[tid] = True
+                            self._fire_alert(frame, tid, x1, y1, x2, y2)
+                    else:
+                        color = (0, 140, 255)       # orange — timer counting down
+                        label = f"? UNKNOWN ({remaining:.1f}s)"
+
+                # ── Annotate the bounding box ─────────────────────────────────
+                cv2.rectangle(result, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(
+                    result, label, (x1, y1 - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.60, color, 2,
+                )
+
+            # ── Purge stale tracks (person left the frame) ────────────────────
+            stale = [tid for tid in list(self._unknown_since) if tid not in active_ids]
+            for tid in stale:
+                del self._unknown_since[tid]
+                self._alerted.pop(tid, None)
+
+        return result
+
+    # ── Internal alert dispatcher ─────────────────────────────────────────────
+
+    def _fire_alert(
+        self,
+        frame: np.ndarray,
+        track_id: int,
+        x1: int, y1: int, x2: int, y2: int,
+    ) -> None:
+        """Send the intrusion email in a daemon thread (non-blocking)."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.alert_log.append({
+            "timestamp": timestamp,
+            "track_id":  track_id,
+            "message":   f"Unrecognised person (track {track_id}) detected for "
+                         f"{self.unknown_alert_seconds:.0f}+ consecutive seconds.",
+        })
+        logger.info(
+            "[SmartSecurity] 🚨 Intruder alert — track %d @ %s", track_id, timestamp
+        )
+        print(f"🚨 [SmartSecurity] Intruder alert: track {track_id} at {timestamp}")
+
+        if not self.enable_email_alerts or not self.receiver_email:
+            logger.warning(
+                "[SmartSecurity] Email alerts disabled or no recipient set. Skipping."
+            )
+            return
+
+        # Crop the person ROI for the alert image
+        crop = frame[max(0, y1):y2, max(0, x1):x2].copy() if frame is not None else None
+
+        # Import lazily so the guard can exist without security.py if needed
+        try:
+            from security import send_security_alert_async
+            import threading as _threading
+            _threading.Thread(
+                target=send_security_alert_async,
+                kwargs={
+                    "people_count":   1,
+                    "frame":          crop,
+                    "receiver_email": self.receiver_email,
+                },
+                daemon=True,
+            ).start()
+        except ImportError as exc:
+            logger.error("[SmartSecurity] Could not import send_security_alert_async: %s", exc)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §10  BRIDGE: Smart Security ← Tracking + Attendance
+# ─────────────────────────────────────────────────────────────────────────────
+
+def bridge_smart_security(
+    frame: np.ndarray,
+    ctx: FrameContext,
+    model: "SmartSecurityGuard",
+) -> np.ndarray:
+    """
+    Injects Tracking boxes and Attendance identity mappings into
+    SmartSecurityGuard.process_with_context().
+
+    Context keys consumed
+    ---------------------
+    "tracked_boxes"   — written by tracking_extractor (§7)
+    "id_to_name"      — written by bridge_attendance_tracking (§6)
+                        Falls back to {} if Attendance is not in the pipeline
+                        (in which case every tracked person is treated as UNKNOWN).
+    """
+    tracked_boxes = ctx.get("tracked_boxes", [])
+    id_to_name    = ctx.get("id_to_name",    {})   # {} = all unknown (fail-secure)
+
+    if not tracked_boxes:
+        # No tracking data yet — nothing to guard
+        return frame
+
+    return model.process_with_context(frame, tracked_boxes, id_to_name)
