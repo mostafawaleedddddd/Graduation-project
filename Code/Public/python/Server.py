@@ -769,8 +769,28 @@ class LiveStreamServer:
             self.security.set_receiver_email(email)
             return {
                 "status":      "ok",
-                "alert_email": email or "fallback (emailsettings.py)",
+                "alert_email": email,
             }
+
+        @self.app.get("/fire_alert_status")
+        async def fire_alert_status():
+            """Return current fire/smoke alert status from the active detector.
+
+            Uses a per-camera detector instance when available, otherwise
+            falls back to the global `self.fire_smoke_detector` instance.
+            """
+            try:
+                cam_id = self.current_camera_id
+                model = None
+                if cam_id and cam_id in self._per_camera_models:
+                    model = self._per_camera_models[cam_id].get("Fire & Smoke Detection")
+                if model is None:
+                    model = self.fire_smoke_detector
+                status = model.get_alert_status() if hasattr(model, 'get_alert_status') else {}
+                return JSONResponse(status)
+            except Exception as exc:
+                print("❌ fire_alert_status error:", exc)
+                return JSONResponse({}, status_code=500)
 
     def run(self):
         print("🚀 ModuVision Server Running at http://0.0.0.0:5000")
