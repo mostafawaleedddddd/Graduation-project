@@ -488,22 +488,57 @@ async function updateBackendPipeline() {
   try {
     const pipeline = Array.from(blocks.values()).map(b => b.type);
 
-    const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pipeline, camera_id: currentCameraId || "default" })
-    });
+    if (currentSplitMode > 1 && Object.keys(splitCameras).length > 0) {
+      // Only update split cameras that haven't had a pipeline confirmed yet.
+      // Confirmed cameras are protected — their pipeline must not be wiped
+      // when the user deletes blocks to set up the next camera.
+      const pendingCameras = Object.values(splitCameras)
+        .map(d => d.cameraId)
+        .filter(id => !splitActiveCameras.has(id));
 
-    if (!response.ok) throw new Error("Server error");
+      if (pendingCameras.length === 0) return; // all cameras confirmed, nothing to do
 
-    const data = await response.json();
-    console.log("Backend pipeline updated:", data);
+      await Promise.all(
+        pendingCameras.map(camId =>
+          fetch("http://127.0.0.1:5000/set_pipeline", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pipeline, camera_id: camId })
+          }).then(r => { if (!r.ok) throw new Error("Server error"); return r.json(); })
+        )
+      );
 
-    if (pipeline.length > 0) {
-      updateLiveFeed("Pipeline updated: " + pipeline.join(" → "));
     } else {
-      updateLiveFeed("All models stopped");
+      // Single mode — update the active camera directly
+      const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipeline, camera_id: currentCameraId || "default" })
+      });
+      if (!response.ok) throw new Error("Server error");
+      const data = await response.json();
+      console.log("Backend pipeline updated:", data);
+
+      // If pipeline is now empty in split mode, revert streams back to raw video
+      if (pipeline.length === 0 && currentSplitMode > 1) {
+        splitPipelineActive = false;
+        for (const [idx, data] of Object.entries(splitCameras)) {
+          const cell = splitGrid.querySelector(`.split-cell[data-index="${idx}"]`);
+          if (!cell) continue;
+          const img = cell.querySelector('.split-cell-img');
+          img.src = `http://127.0.0.1:5000/video_raw?url=${encodeURIComponent(data.url)}&t=${Date.now()}`;
+          if (focusedPanelIndex === parseInt(idx)) {
+            splitFocusImg.src = img.src;
+          }
+        }
+      }
     }
+
+    updateLiveFeed(
+      pipeline.length > 0
+        ? "Pipeline updated: " + pipeline.join(" → ")
+        : "All models stopped"
+    );
 
   } catch (err) {
     console.error("Failed to update backend pipeline:", err);
@@ -682,6 +717,12 @@ async function applyPipelineToCamera(pipeline, cameraIds) {
         }
       }
       splitPipelineActive = true;
+
+      // Mark these cameras as confirmed so updateBackendPipeline won't wipe them
+      cameraIds.forEach(id => splitActiveCameras.add(id));
+
+      // Clear the canvas so the user starts fresh for the next camera's pipeline
+      clearCanvasOnly();
     }
   } catch (err) {
     console.error(err);
@@ -1592,6 +1633,7 @@ let currentSplitMode = 1;        // 1 = single, 2/3/4 = split
 let splitCameras = {};           // { panelIndex: { cameraId, url } }
 let focusedPanelIndex = null;    // which panel is currently focused
 let splitPipelineActive = false; // true after uploadProject applied a pipeline in split mode
+const splitActiveCameras = new Set(); // tracks cameras that already have a confirmed pipeline applied
 
 const splitGrid        = document.getElementById('splitGrid');
 const splitFocusOverlay= document.getElementById('splitFocusOverlay');
@@ -1621,6 +1663,7 @@ function setSplitMode(n) {
     splitGrid.innerHTML = '';
     splitCameras = {};
     splitPipelineActive = false;
+    splitActiveCameras.clear();
 
     // Show normal live feed elements
     document.getElementById('liveFeedPlaceholder').style.display = '';
@@ -1641,6 +1684,7 @@ function setSplitMode(n) {
     splitGrid.className = 'split-grid active split-' + n;
     splitGrid.innerHTML = '';
     splitCameras = {};
+    splitActiveCameras.clear();
 
     for (let i = 0; i < n; i++) {
       splitGrid.appendChild(buildSplitCell(i));
