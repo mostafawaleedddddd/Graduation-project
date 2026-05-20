@@ -630,18 +630,19 @@ svg {
   margin-top: -8px;
 }
 
-.live-feed-placeholder .resize-grip {
+.resize-grip {
   position: absolute;
   left: 14px;
   top: 14px;
-  width: 18px;
-  height: 18px;
+  width: 13px;
+  height: 13px;
   border-left: 2px solid rgba(255, 255, 255, 0.35);
   border-top: 2px solid rgba(255, 255, 255, 0.35);
   cursor: nwse-resize;
+  z-index: 30;
 }
 
-.live-feed-placeholder .resize-grip:hover {
+.resize-grip:hover {
   transform: scale(1.1);
   opacity: 0.85;
 }
