@@ -1,6 +1,7 @@
 let cameras = [];
 const cameraPipelines = {};
 let currentCameraId = null;
+let currentUserEmail = null;
 
 const cameraSelect = document.getElementById("cameraSelect");
 const cameraDropdownToggle = document.getElementById("cameraDropdownToggle");
@@ -92,6 +93,32 @@ function showLiveFeedPlaceholder(title, message) {
   liveFeedImage.classList.remove("is-active");
   liveFeedImage.removeAttribute("src");
   liveFeedSubtext.textContent = message;
+}
+
+function sendAlertEmailToPython(email) {
+  if (!email) {
+    console.warn('sendAlertEmailToPython called without an email.');
+    return;
+  }
+
+  fetch('http://127.0.0.1:5000/set_alert_email', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ email })
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (!data || data.status !== 'ok') {
+        console.warn('Failed to set alert email on Python server', data);
+      } else {
+        console.log('Alert recipient set on Python server:', email);
+      }
+    })
+    .catch(err => {
+      console.error('Error sending alert email to Python server:', err);
+    });
 }
 
 function showLiveFeedStream(cameraName) {
@@ -203,6 +230,10 @@ function startCamera() {
   if (!currentCameraId) {
     showLiveFeedPlaceholder("Camera idle", "Select a camera to start streaming");
     return;
+  }
+
+  if (currentUserEmail) {
+    sendAlertEmailToPython(currentUserEmail);
   }
 
   const suffix = currentCameraId ? `camera_id=${encodeURIComponent(currentCameraId)}&` : "";
@@ -1234,6 +1265,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   showLiveFeedPlaceholder("Camera idle", "Select a camera to start streaming");
   loadProjects();
+
+  fetch('/user/getProfile', { credentials: 'include' })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.email) {
+        currentUserEmail = data.email;
+        sendAlertEmailToPython(data.email);
+      } else {
+        console.warn('getProfile did not return an email', data);
+      }
+    })
+    .catch(err => {
+      console.error('Unable to retrieve current user profile for alert email:', err);
+    });
+
   const dropdown = document.getElementById('projectSelect');
   const deleteBtn = document.getElementById('deleteProjectBtn');
   if (deleteBtn) {
@@ -1768,3 +1814,131 @@ function exitFocusMode() {
     splitGrid.style.display = '';
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FIRE & SMOKE ALERT SYSTEM
+   Polls /fire_alert_status every second while Fire & Smoke
+   Detection is active in any pipeline.  Shows non-blocking
+   toasts — no overlay, no backdrop blur.
+════════════════════════════════════════════════════════════════ */
+
+let _firePollingTimer   = null;   // setInterval handle
+let _fireDismissed      = { fire: false, smoke: false };  // user-dismissed this session
+
+/* ── Start polling when fire detection is in the pipeline ── */
+function startFirePolling() {
+  if (_firePollingTimer !== null) return;  // already running
+  _fireDismissed = { fire: false, smoke: false };
+  _firePollingTimer = setInterval(_pollFireStatus, 1000);
+  console.log('[FireAlert] Polling started');
+}
+
+/* ── Stop polling (pipeline changed / model removed) ── */
+function stopFirePolling() {
+  if (_firePollingTimer === null) return;
+  clearInterval(_firePollingTimer);
+  _firePollingTimer = null;
+  // Hide any open toasts when the model is deactivated
+  _hideFireToast('fire');
+  _hideFireToast('smoke');
+  console.log('[FireAlert] Polling stopped');
+}
+
+/* ── Single poll cycle ── */
+async function _pollFireStatus() {
+  try {
+    const res  = await fetch('http://127.0.0.1:5000/fire_alert_status');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    _handleFireClass('fire',  data.fire,  '🔥 Fire detected continuously for 3 seconds!');
+    _handleFireClass('smoke', data.smoke, '🌫️ Smoke detected continuously for 5 seconds!');
+
+  } catch (_) {
+    // Server unreachable — silently skip this tick
+  }
+}
+
+/* ── Show / hide a single toast based on alert state ── */
+function _handleFireClass(cls, info, defaultMessage) {
+  if (!info) return;
+
+  const toastId  = cls === 'fire' ? 'fireAlertToast' : 'smokeAlertToast';
+  const subId    = cls === 'fire' ? 'fireAlertSub'   : 'smokeAlertSub';
+  const toast    = document.getElementById(toastId);
+  const subEl    = document.getElementById(subId);
+  if (!toast) return;
+
+  if (info.alert && !_fireDismissed[cls]) {
+    // Build a dynamic sub-message with elapsed time
+    const elapsed = info.elapsed_seconds.toFixed(0);
+    const msg     = cls === 'fire'
+      ? `Continuous detection for ${elapsed}s — evacuate immediately!`
+      : `Continuous detection for ${elapsed}s — check ventilation!`;
+    if (subEl) subEl.textContent = msg;
+
+    // Show toast if not already visible
+    if (toast.style.display === 'none') {
+      toast.style.display = 'flex';
+      // Stack second toast if the first is visible
+      _repositionToasts();
+    }
+  } else if (!info.alert) {
+    // Alert cleared — re-arm so it can show again next streak
+    _fireDismissed[cls] = false;
+    _hideFireToast(cls);
+  }
+}
+
+/* ── Reposition stacked toasts so they don't overlap ── */
+function _repositionToasts() {
+  const fireToast  = document.getElementById('fireAlertToast');
+  const smokeToast = document.getElementById('smokeAlertToast');
+  if (!fireToast || !smokeToast) return;
+
+  const fireVisible  = fireToast.style.display  !== 'none';
+  const smokeVisible = smokeToast.style.display !== 'none';
+
+  fireToast.style.top  = '72px';
+  smokeToast.style.top = (fireVisible && smokeVisible) ? '160px' : '72px';
+}
+
+/* ── User dismissed a toast ── */
+function dismissFireToast(cls) {
+  _fireDismissed[cls] = true;
+  _hideFireToast(cls);
+}
+
+function _hideFireToast(cls) {
+  const toastId = cls === 'fire' ? 'fireAlertToast' : 'smokeAlertToast';
+  const toast   = document.getElementById(toastId);
+  if (toast) toast.style.display = 'none';
+  _repositionToasts();
+}
+
+/* ── Hook into applyPipelineToCamera to auto start/stop polling ── */
+const _origApplyPipeline = applyPipelineToCamera;
+applyPipelineToCamera = async function(pipeline, cameraIds) {
+  await _origApplyPipeline(pipeline, cameraIds);
+
+  if (pipeline.includes('Fire & Smoke Detection')) {
+    startFirePolling();
+  } else {
+    // If fire is not in this pipeline, stop only if no other
+    // active camera still has it
+    const anyFireActive = Object.values(cameraPipelines).some(
+      p => Array.isArray(p) && p.includes('Fire & Smoke Detection')
+    );
+    if (!anyFireActive) stopFirePolling();
+  }
+};
+
+/* ── Also stop polling when a block is deleted from the canvas ── */
+const _origDeleteBlock = deleteBlock;
+deleteBlock = function(id) {
+  _origDeleteBlock(id);
+  const pipeline = Array.from(blocks.values()).map(b => b.type);
+  if (!pipeline.includes('Fire & Smoke Detection')) {
+    stopFirePolling();
+  }
+};

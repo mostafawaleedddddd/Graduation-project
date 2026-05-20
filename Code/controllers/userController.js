@@ -55,7 +55,7 @@ async function addUser(req, res) {
     }
   }
   catch (error) {
-    console.error(error);  // Log the error for debugging
+    console.error(error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 }
@@ -95,7 +95,6 @@ async function addCamera(req, res) {
       return res.json({ success: false, message: "User not found" });
     }
 
-    // 🔥 add/update camera
     user.cameras.set(name, url);
 
     await user.save();
@@ -186,6 +185,16 @@ async function deleteCamera(req, res) {
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
+
+
+function getProfile(req, res) {
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({ success: false, message: "Not logged in" });
+  }
+  const { Name, EmailAddress } = req.session.user;
+  return res.json({ success: true, name: Name, email: EmailAddress });
+}
+
 module.exports = {
   login,
   checkCredentials,
@@ -193,5 +202,6 @@ module.exports = {
   addCamera,
   getCameras,
   getCameraByName,
-  deleteCamera
+  deleteCamera,
+  getProfile,
 };

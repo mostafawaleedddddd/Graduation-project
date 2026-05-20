@@ -25,6 +25,7 @@ router.post('/projectsCreate', projectController.createProject);
 router.get('/Getprojects', projectController.getUserProjects);
 router.get('/projects/:projectId', projectController.getProjectById);
 router.delete('/projects/:projectId', projectController.deleteProject);
+router.get('/getProfile', user.getProfile);
 
 /* ─── CAMERA ROUTES ─── */
 router.post('/addCamera', user.addCamera);

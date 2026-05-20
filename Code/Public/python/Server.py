@@ -752,6 +752,26 @@ class LiveStreamServer:
                 "enable_email_alerts":  enable_alerts,
             }
 
+        @self.app.post("/set_alert_email")
+        async def set_alert_email(request: Request):
+            """
+            Called by the Dashboard immediately after login and whenever the
+            Security pipeline is activated.  Stores the logged-in user's email
+            address on the SecuritySystem instance so that alert emails are sent
+            to the correct person instead of the hardcoded fallback address.
+
+            Body (JSON):
+              { "email": "user@example.com" }   — set dynamic recipient
+              { "email": null }                  — revert to hardcoded fallback
+            """
+            data  = await request.json()
+            email = data.get("email") or None
+            self.security.set_receiver_email(email)
+            return {
+                "status":      "ok",
+                "alert_email": email or "fallback (emailsettings.py)",
+            }
+
     def run(self):
         print("🚀 ModuVision Server Running at http://0.0.0.0:5000")
         print("   MJPEG      → http://0.0.0.0:5000/video")
