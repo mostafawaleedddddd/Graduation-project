@@ -641,7 +641,8 @@ async function uploadProject() {
         pipeline[0] === "Parking Management" ||
         pipeline[0] === "Heatmap" ||
         pipeline[0] === "Color Detection" ||
-        pipeline[0] === "Fire & Smoke Detection"
+        pipeline[0] === "Fire & Smoke Detection" ||
+        pipeline[0] === "Weapon Detection"
       );
 
     const isValid = isAllowedSingle || isAllowedCombo;
@@ -2106,5 +2107,93 @@ applyPipelineToCamera = async function(pipeline, cameraIds) {
            p.includes('Gap Detection')
     );
     if (!anyShelfActive) stopShelfGapPolling();
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   WEAPON DETECTION ALERT SYSTEM
+   Polls /weapon_alert_status every second while Weapon Detection
+   is active in any pipeline. Shows a non-blocking toast alert.
+════════════════════════════════════════════════════════════════ */
+
+let _weaponPollingTimer = null;
+let _weaponDismissed    = false;
+
+function startWeaponPolling() {
+  if (_weaponPollingTimer !== null) return;
+  _weaponDismissed = false;
+  _weaponPollingTimer = setInterval(_pollWeaponStatus, 1000);
+  console.log('[WeaponAlert] Polling started');
+}
+
+function stopWeaponPolling() {
+  if (_weaponPollingTimer === null) return;
+  clearInterval(_weaponPollingTimer);
+  _weaponPollingTimer = null;
+  _hideWeaponToast();
+  console.log('[WeaponAlert] Polling stopped');
+}
+
+async function _pollWeaponStatus() {
+  try {
+    const res  = await fetch('http://127.0.0.1:5000/weapon_alert_status');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const toast  = document.getElementById('weaponAlertToast');
+    const subEl  = document.getElementById('weaponAlertSub');
+    if (!toast) return;
+
+    if (data.alert && !_weaponDismissed) {
+      const elapsed = data.elapsed_seconds ? data.elapsed_seconds.toFixed(0) : '—';
+      const label   = data.weapon_type || 'Weapon';
+      if (subEl) subEl.textContent = `${label} detected for ${elapsed}s — secure the area!`;
+      if (toast.style.display === 'none') {
+        toast.style.display = 'flex';
+        _repositionWeaponToast();
+      }
+    } else if (!data.alert) {
+      _weaponDismissed = false;
+      _hideWeaponToast();
+    }
+  } catch (_) {
+    // Server unreachable — skip tick
+  }
+}
+
+function _repositionWeaponToast() {
+  const fireToast   = document.getElementById('fireAlertToast');
+  const smokeToast  = document.getElementById('smokeAlertToast');
+  const weaponToast = document.getElementById('weaponAlertToast');
+  if (!weaponToast) return;
+
+  const fireVisible  = fireToast  && fireToast.style.display  !== 'none';
+  const smokeVisible = smokeToast && smokeToast.style.display !== 'none';
+  const activeAbove  = [fireVisible, smokeVisible].filter(Boolean).length;
+  weaponToast.style.top = (72 + activeAbove * 88) + 'px';
+}
+
+function dismissWeaponToast() {
+  _weaponDismissed = true;
+  _hideWeaponToast();
+}
+
+function _hideWeaponToast() {
+  const toast = document.getElementById('weaponAlertToast');
+  if (toast) toast.style.display = 'none';
+}
+
+/* ── Hook into applyPipelineToCamera to auto start/stop weapon polling ── */
+const _origApplyPipelineWeapon = applyPipelineToCamera;
+applyPipelineToCamera = async function(pipeline, cameraIds) {
+  await _origApplyPipelineWeapon(pipeline, cameraIds);
+
+  if (pipeline.includes('Weapon Detection')) {
+    startWeaponPolling();
+  } else {
+    const anyWeaponActive = Object.values(cameraPipelines).some(
+      p => Array.isArray(p) && p.includes('Weapon Detection')
+    );
+    if (!anyWeaponActive) stopWeaponPolling();
   }
 };

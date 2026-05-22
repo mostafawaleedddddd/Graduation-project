@@ -24,7 +24,8 @@ from car_parking import ParkingManagementBlock
 from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
 from fire_detection import FireSmokeDetector
-# ── NEW: Dynamic NMN ─────────────────────────────────────────────────────────
+from weapon_detection import WeaponDetector                          # ── NEW ──
+# ── Dynamic NMN ──────────────────────────────────────────────────────────────
 from NMN import (
     DynamicNMN,
     tracking_extractor,
@@ -112,16 +113,17 @@ class LiveStreamServer:
         self.model = YOLO("yolov8s.pt")
         self.model.to("cuda")
 
-        self.human_tracker      = HumanTracker()
-        self.object_counter     = ObjectCounterBlock()
-        self.dual_counter       = DualModelObjectCounter()
-        self.gap_detector       = ShelfGapDetector()
-        self.attendance         = AttendanceSystem()
-        self.security           = SecuritySystem()
-        self.parking_model      = ParkingManagementBlock()
-        self.heatmap            = HeatmapBlock()
-        self.shelf_orchestrator = ShelfOrchestrator()
+        self.human_tracker       = HumanTracker()
+        self.object_counter      = ObjectCounterBlock()
+        self.dual_counter        = DualModelObjectCounter()
+        self.gap_detector        = ShelfGapDetector()
+        self.attendance          = AttendanceSystem()
+        self.security            = SecuritySystem()
+        self.parking_model       = ParkingManagementBlock()
+        self.heatmap             = HeatmapBlock()
+        self.shelf_orchestrator  = ShelfOrchestrator()
         self.fire_smoke_detector = FireSmokeDetector()
+        self.weapon_detector     = WeaponDetector(weights="weapon_best.pt")  # ── NEW ──
 
         # ================= PER-CAMERA MODEL INSTANCES =================
         # Models that are NOT thread-safe (e.g. any YOLO-based detector)
@@ -142,10 +144,6 @@ class LiveStreamServer:
             "Tracking",
             self.human_tracker,
             raw_process_fn=self.human_tracker.process,
-            # ── context_extract_fn pulls tracked bounding boxes ──────────
-            # Requires HumanTracker.get_tracks() — see NMN.py §7 for how to
-            # add it.  Works with or without it; downstream modules degrade
-            # gracefully to full-frame processing when context is absent.
             context_extract_fn=tracking_extractor,
         )
 
@@ -193,9 +191,10 @@ class LiveStreamServer:
             self.parking_model,
             raw_process_fn=self.parking_model.process,
         )
+
         self.smart_security_guard = SmartSecurityGuard(enable_email_alerts=True)
         self.nmn.register(
-                "Smart Security",
+            "Smart Security",
             self.smart_security_guard,
             raw_process_fn=self.smart_security_guard.process,
         )
@@ -346,9 +345,12 @@ class LiveStreamServer:
 
                     elif step == "Heatmap":
                         frame = self.heatmap.process(frame)
+
                     elif step == "Fire & Smoke Detection":
                         frame = self.fire_smoke_detector.process(frame)
-                    
+
+                    elif step == "Weapon Detection":                  # ── NEW ──
+                        frame = self.weapon_detector.process(frame)  # ── NEW ──
 
                 self.latest_output.put(frame)
 
@@ -373,9 +375,8 @@ class LiveStreamServer:
                 print(f"🔧 Creating dedicated {step} model for camera '{cam_id}'")
                 if step == "Fire & Smoke Detection":
                     cam_models[step] = FireSmokeDetector()
-                # Add other per-camera model types here as needed, e.g.:
-                # elif step == "Some Other Model":
-                #     cam_models[step] = SomeOtherModel()
+                elif step == "Weapon Detection":                                  # ── NEW ──
+                    cam_models[step] = WeaponDetector(weights="weapon_best.pt")  # ── NEW ──
                 else:
                     # Shared/stateless models — return global instance
                     return None
@@ -447,7 +448,7 @@ class LiveStreamServer:
                 self._ws_clients.append(websocket)
             await self._ws_sender(websocket)
 
-        # ── NEW: NMN diagnostic endpoint ──────────────────────────────────
+        # ── NMN diagnostic endpoint ───────────────────────────────────────────
         @self.app.get("/nmn_status")
         async def nmn_status():
             """
@@ -658,6 +659,11 @@ class LiveStreamServer:
                                             if fire_model is None:
                                                 fire_model = server_ref.fire_smoke_detector
                                             frame = fire_model.process(frame)
+                                        elif step == "Weapon Detection":                     # ── NEW ──
+                                            weapon_model = server_ref._get_camera_model(cam_id, step)
+                                            if weapon_model is None:
+                                                weapon_model = server_ref.weapon_detector
+                                            frame = weapon_model.process(frame)
                         except Exception as e:
                             import traceback
                             print(f"⚠️ Split pipeline error [{cam_id}]: {e}")
@@ -828,6 +834,41 @@ class LiveStreamServer:
             except Exception as exc:
                 print("❌ fire_alert_status error:", exc)
                 return JSONResponse({}, status_code=500)
+
+        # ── NEW: Weapon alert endpoints ───────────────────────────────────────
+
+        @self.app.get("/weapon_alert_status")
+        async def weapon_alert_status():
+            """Return current weapon alert status from the active detector.
+
+            Uses a per-camera detector instance when available, otherwise
+            falls back to the global `self.weapon_detector` instance.
+            Mirrors /fire_alert_status — poll from frontend when
+            'Weapon Detection' is in the active pipeline.
+            """
+            try:
+                cam_id = self.current_camera_id
+                model  = None
+                if cam_id and cam_id in self._per_camera_models:
+                    model = self._per_camera_models[cam_id].get("Weapon Detection")
+                if model is None:
+                    model = self.weapon_detector
+                status = model.get_alert_status() if hasattr(model, "get_alert_status") else {}
+                return JSONResponse(status)
+            except Exception as exc:
+                print("❌ weapon_alert_status error:", exc)
+                return JSONResponse({}, status_code=500)
+
+        @self.app.get("/weapon_results")
+        async def weapon_results():
+            """Returns the full weapon detection log (class, confidence, time, frame)."""
+            return JSONResponse(self.weapon_detector.get_results())
+
+        @self.app.post("/reset_weapon")
+        async def reset_weapon():
+            """Clears the weapon detection log and streak counters."""
+            self.weapon_detector.reset()
+            return {"status": "weapon detection reset done"}
 
     def run(self):
         print("🚀 ModuVision Server Running at http://0.0.0.0:5000")

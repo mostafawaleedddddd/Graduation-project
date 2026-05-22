@@ -66,6 +66,9 @@
             <div class="functionality" draggable="true" data-type="Fire & Smoke Detection">
                 🔥 Fire & Smoke Detection
             </div>
+            <div class="functionality" draggable="true" data-type="Weapon Detection">
+                🔫 Weapon Detection
+            </div>
         </div>
 
         <!-- Info Modal -->
@@ -262,6 +265,15 @@
             <span class="fire-toast-sub" id="smokeAlertSub">Continuous detection for 5 seconds</span>
         </div>
         <button class="fire-toast-dismiss" onclick="dismissFireToast('smoke')" title="Dismiss">✕</button>
+    </div>
+
+    <div id="weaponAlertToast" class="fire-toast fire-toast--weapon" style="display:none;">
+        <span class="fire-toast-icon">🔫</span>
+        <div class="fire-toast-body">
+            <span class="fire-toast-title">WEAPON DETECTED</span>
+            <span class="fire-toast-sub" id="weaponAlertSub">Weapon detected in camera feed</span>
+        </div>
+        <button class="fire-toast-dismiss" onclick="dismissWeaponToast()" title="Dismiss">✕</button>
     </div>
 
 
