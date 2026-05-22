@@ -2166,17 +2166,16 @@ async function _pollWeaponStatus() {
     const subEl  = document.getElementById('weaponAlertSub');
     if (!toast) return;
 
-    if (data.alert && !_weaponDismissed) {
+    const anyAlert = data.alert ||
+      (data.classes && Object.values(data.classes).some(info => info.alert));
+
+    if (anyAlert && !_weaponDismissed) {
       const elapsed = data.elapsed_seconds ? data.elapsed_seconds.toFixed(0) : '—';
-      const label   = data.weapon_type || 'Weapon';
-      if (subEl) subEl.textContent = `${label} detected for ${elapsed}s — secure the area!`;
+      if (subEl) subEl.textContent = `Weapon detected for ${elapsed}s — secure the area!`;
       if (toast.style.display === 'none') {
         toast.style.display = 'flex';
         _repositionWeaponToast();
       }
-    } else if (!data.alert) {
-      _weaponDismissed = false;
-      _hideWeaponToast();
     }
   } catch (_) {
     // Server unreachable — skip tick

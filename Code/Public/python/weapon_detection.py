@@ -4,7 +4,7 @@ import torch
 import time
 from datetime import datetime
 from ultralytics import YOLO
-
+import face_recognition  # <-- NEW: Added for facial memorization
 
 class WeaponDetector:
 
@@ -13,7 +13,7 @@ class WeaponDetector:
         "gun":     2.0,
         "knife":   2.0,
         "rifle":   2.0,
-        "bomb":    1.0,   # faster alert for bomb
+        "bomb":    1.0,   
         "pistol":  2.0,
         "celurit": 2.0,
         "golok":   2.0,
@@ -27,7 +27,7 @@ class WeaponDetector:
 
     def __init__(self, weights="weapon_best.pt", conf=0.4, iou=0.5, imgsz=640):
 
-        # ================= LOAD MODEL ON GPU =================
+        # ================= LOAD WEAPON MODEL =================
         print("🔄 Loading Weapon Detection model on GPU...")
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model  = YOLO(weights)
@@ -39,7 +39,6 @@ class WeaponDetector:
         self.iou   = iou
         self.imgsz = imgsz
 
-        # Class names — must match your training order in weapon_data.yaml
         self.class_names = {
             0: "celurit",
             1: "golok",
@@ -50,7 +49,6 @@ class WeaponDetector:
             6: "senapan",
         }
 
-        # BGR colors per class
         self.colors = {
             0: (0,   0,   255),   # celurit → red
             1: (0,   140, 255),   # golok   → orange
@@ -61,29 +59,56 @@ class WeaponDetector:
             6: (0,   200, 100),   # senapan → green
         }
 
-        # ================= ALERT TRACKING =================
+        # ================= WEAPON ALERT TRACKING =================
         self.alert_log   = []
         self.frame_count = 0
 
-        self._streak_start: dict[str, float | None] = {
-            cls: None for cls in self.ALERT_THRESHOLDS
-        }
-        self._last_seen: dict[str, float] = {
-            cls: 0.0 for cls in self.ALERT_THRESHOLDS
-        }
+        self._streak_start: dict[str, float | None] = {cls: None for cls in self.ALERT_THRESHOLDS}
+        self._last_seen: dict[str, float] = {cls: 0.0 for cls in self.ALERT_THRESHOLDS}
+
+        # ================= FACE MEMORIZATION (NEW) =================
+        self.known_face_encodings = []
+        self.known_face_ids = []
+        self.next_person_id = 1
 
         print("✅ WeaponDetector ready")
 
     # ================= PROCESS FRAME =================
     def process(self, frame: np.ndarray) -> np.ndarray:
-        """
-        Runs detection on a single BGR frame (OpenCV format).
-        Draws bounding boxes + labels and returns the annotated frame.
-        Updates streak counters used by get_alert_status().
-        """
         self.frame_count += 1
         now = time.monotonic()
 
+
+        # face_recognition requires RGB format
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Find face locations and compute encodings (the "memory" of the face)
+        face_locations = face_recognition.face_locations(rgb_frame)
+        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+
+        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+            # Check if this face matches any face we have seen before
+            matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding, tolerance=0.6)
+            person_id = None
+            
+            if True in matches:
+                # We've seen this person before, get their existing ID
+                first_match_index = matches.index(True)
+                person_id = self.known_face_ids[first_match_index]
+            else:
+                # This is a new face! Memorize it.
+                self.known_face_encodings.append(face_encoding)
+                self.known_face_ids.append(self.next_person_id)
+                person_id = self.next_person_id
+                self.next_person_id += 1
+
+            # Draw the face bounding box and ID
+            face_label = f"Person ID: {person_id}"
+            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            cv2.putText(frame, face_label, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+
+
+        # ── 2. WEAPON DETECTION (EXISTING) ──────────────────────────────────
         results = self.model.predict(
             source  = frame,
             conf    = self.conf,
@@ -106,26 +131,15 @@ class WeaponDetector:
                 color    = self.colors.get(cls_id, (0, 255, 0))
                 label    = f"{cls_name.upper()} ({conf_sc:.2f})"
 
-                # ── Draw box ──────────────────────────────────────────
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-
-                # ── Label background + text ───────────────────────────
-                (tw, th), _ = cv2.getTextSize(
-                    label, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2)
-                cv2.rectangle(
-                    frame,
-                    (x1, y1 - th - 10), (x1 + tw + 6, y1),
-                    color, -1)
-                cv2.putText(
-                    frame, label,
-                    (x1 + 3, y1 - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65,
-                    (255, 255, 255), 2)
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2)
+                cv2.rectangle(frame, (x1, y1 - th - 10), (x1 + tw + 6, y1), color, -1)
+                cv2.putText(frame, label, (x1 + 3, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
 
                 detected_this_frame.add(cls_name)
                 self._log_detection(cls_name, conf_sc)
 
-        # ── Update streak counters ─────────────────────────────────────
+        # ── Update weapon streak counters ─────────────────────────────────────
         for cls_name in self.ALERT_THRESHOLDS:
             if cls_name in detected_this_frame:
                 self._last_seen[cls_name] = now
@@ -138,15 +152,10 @@ class WeaponDetector:
 
         return frame
 
-    # ================= ALERT STATUS =================
+    # ================= ALERT STATUS & LOGGING =================
     def get_alert_status(self) -> dict:
-        """
-        Returns per-class alert status.
-        Matches the same interface as FireSmokeDetector.get_alert_status().
-        """
         now    = time.monotonic()
         status = {}
-
         for cls_name, threshold in self.ALERT_THRESHOLDS.items():
             streak_start = self._streak_start[cls_name]
             last_seen    = self._last_seen[cls_name]
@@ -168,38 +177,27 @@ class WeaponDetector:
 
         return status
 
-    # ================= ALERT LOGGING =================
-    def _log_detection(self, cls_name: str, confidence: float):
-        now = datetime.now().strftime("%H:%M:%S")
-        self.alert_log.append({
-            "class"     : cls_name,
-            "confidence": round(confidence, 3),
-            "time"      : now,
-            "frame"     : self.frame_count,
-        })
-        print(f"🔫 Detected: {cls_name.upper()}  conf={confidence:.2f}  @ {now}")
-
-    # ================= GET RESULTS =================
     def get_results(self) -> list:
-        """Returns the full detection log."""
+        """Returns the full weapon detection log."""
         return self.alert_log
 
-    # ================= RESET =================
     def reset(self):
-        """Clears the detection log, frame counter and streaks."""
+        """Clears the weapon detection log and streak counters."""
         self.alert_log   = []
         self.frame_count = 0
         for cls_name in self.ALERT_THRESHOLDS:
             self._streak_start[cls_name] = None
             self._last_seen[cls_name]    = 0.0
-        print("✅ Weapon detection log cleared")
+
+    def _log_detection(self, cls_name: str, confidence: float):
+        now = datetime.now().strftime("%H:%M:%S")
+        self.alert_log.append({"class": cls_name, "confidence": round(confidence, 3), "time": now, "frame": self.frame_count})
 
 
 # ════════════════════════════════════════════════════════════════
-#  EXAMPLE USAGE — webcam / video / IP camera
+#  EXAMPLE USAGE
 # ════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-
     detector = WeaponDetector(
         weights = "weapon_best.pt",
         conf    = 0.4,
@@ -207,7 +205,6 @@ if __name__ == "__main__":
         imgsz   = 640,
     )
 
-    # Change 0 to a video path or RTSP URL as needed
     cap = cv2.VideoCapture(0)
     print("\n  Press Q to quit\n")
 
@@ -216,9 +213,10 @@ if __name__ == "__main__":
         if not ret:
             break
 
+        # Process frame (now includes face ID and weapon detection)
         frame = detector.process(frame)
 
-        # Print alert status every frame
+        # Print alert status
         status = detector.get_alert_status()
         for cls, info in status.items():
             if info["alert"]:
