@@ -854,7 +854,21 @@ class LiveStreamServer:
                 if model is None:
                     model = self.weapon_detector
                 status = model.get_alert_status() if hasattr(model, "get_alert_status") else {}
-                return JSONResponse(status)
+                summary = {
+                    "alert":          False,
+                    "weapon_type":    None,
+                    "elapsed_seconds": 0.0,
+                    "threshold":      None,
+                    "classes":        status,
+                }
+                for cls_name, info in status.items():
+                    if info.get("alert"):
+                        if not summary["alert"] or info["elapsed_seconds"] > summary["elapsed_seconds"]:
+                            summary["alert"] = True
+                            summary["weapon_type"] = "Weapon"
+                            summary["elapsed_seconds"] = info["elapsed_seconds"]
+                            summary["threshold"] = info["threshold"]
+                return JSONResponse(summary)
             except Exception as exc:
                 print("❌ weapon_alert_status error:", exc)
                 return JSONResponse({}, status_code=500)
