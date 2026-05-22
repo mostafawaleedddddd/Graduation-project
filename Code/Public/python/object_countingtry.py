@@ -7,7 +7,7 @@ class ObjectCounterBlock:
     def __init__(
         self,
         model_path="best.pt",
-        conf=0.25,
+        conf=0.45,
         iou=0.45,
     ):
         self.model = YOLO(model_path)

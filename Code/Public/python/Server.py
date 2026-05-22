@@ -20,7 +20,7 @@ from two_models import DualModelObjectCounter
 from shelf_gap_detect_images import ShelfGapDetector
 from attendence import AttendanceSystem
 from security import SecuritySystem
-from car_parking import ParkingManagementBlock
+from car_parking import ParkingSlotDetector
 from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
 from fire_detection import FireSmokeDetector
@@ -42,6 +42,13 @@ def _encode_frame(frame, quality: int = 75):
     """Synchronous JPEG encode — called via run_in_executor."""
     ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
     return buffer.tobytes() if ret else None
+
+
+def _frame_only(result):
+    """Normalize model outputs so the streaming pipeline always receives a frame."""
+    if isinstance(result, tuple):
+        return result[0]
+    return result
 
 
 # ─── Atomic frame store ───────────────────────────────────────────────────────
@@ -119,7 +126,7 @@ class LiveStreamServer:
         self.gap_detector        = ShelfGapDetector()
         self.attendance          = AttendanceSystem()
         self.security            = SecuritySystem()
-        self.parking_model       = ParkingManagementBlock()
+        self.parking_model       = ParkingSlotDetector()
         self.heatmap             = HeatmapBlock()
         self.shelf_orchestrator  = ShelfOrchestrator()
         self.fire_smoke_detector = FireSmokeDetector()
@@ -189,7 +196,7 @@ class LiveStreamServer:
         self.nmn.register(
             "Parking Management",
             self.parking_model,
-            raw_process_fn=self.parking_model.process,
+            raw_process_fn=lambda f: _frame_only(self.parking_model.process(f)),
         )
 
         self.smart_security_guard = SmartSecurityGuard(enable_email_alerts=True)
@@ -341,7 +348,7 @@ class LiveStreamServer:
                         frame = self.security.process(frame)
 
                     elif step == "Parking Management":
-                        frame = self.parking_model.process(frame)
+                        frame = _frame_only(self.parking_model.process(frame))
 
                     elif step == "Heatmap":
                         frame = self.heatmap.process(frame)
@@ -649,7 +656,7 @@ class LiveStreamServer:
                                         elif step == "Security":
                                             frame = server_ref.security.process(frame)
                                         elif step == "Parking Management":
-                                            frame = server_ref.parking_model.process(frame)
+                                            frame = _frame_only(server_ref.parking_model.process(frame))
                                         elif step == "Heatmap":
                                             frame = server_ref.heatmap.process(frame)
                                         elif step == "Fire & Smoke Detection":

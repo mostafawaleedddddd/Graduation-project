@@ -241,6 +241,10 @@ function startCamera() {
   liveFeedImage.src = `http://127.0.0.1:5000/video?${suffix}t=${Date.now()}`;
 }
 
+function getCameraUrlById(cameraId) {
+  return cameras.find(camera => camera.name === cameraId)?.url || "";
+}
+
 async function activateParkingMode() {
   await fetch("http://127.0.0.1:5000/init_parking", { method: "POST" });
   alert("Draw parking areas in the opened window, then press ESC");
@@ -680,6 +684,10 @@ async function uploadProject() {
 /* ── Apply pipeline to a list of camera IDs ── */
 async function applyPipelineToCamera(pipeline, cameraIds) {
   try {
+    cameraIds.forEach(camId => {
+      cameraPipelines[camId] = [...pipeline];
+    });
+
     const results = await Promise.all(cameraIds.map(camId =>
       fetch("http://127.0.0.1:5000/set_pipeline", {
         method: "POST",
@@ -692,6 +700,20 @@ async function applyPipelineToCamera(pipeline, cameraIds) {
     openInfoModal("Models Applied", `<p>Successfully applied:<br><b>${pipeline.join(" &rarr; ")}</b><br><span style="color:var(--text-dim);font-size:0.85rem;">Applied to: ${camList}</span></p>`);
     updateLiveFeed("Pipeline applied: " + pipeline.join(" → "));
     console.log("Backend pipelines:", results);
+
+    if (currentSplitMode <= 1 && currentCameraId && cameraIds.includes(currentCameraId)) {
+      const currentCameraUrl = getCameraUrlById(currentCameraId);
+      if (currentCameraUrl) {
+        await fetch("http://127.0.0.1:5000/set_camera", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ camera_id: currentCameraId, url: currentCameraUrl })
+        });
+      }
+
+      liveFeedImage.removeAttribute("src");
+      startCamera();
+    }
 
     if (currentSplitMode > 1) {
       for (const [idx, data] of Object.entries(splitCameras)) {
