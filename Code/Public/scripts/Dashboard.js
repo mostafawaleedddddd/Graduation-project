@@ -642,6 +642,7 @@ async function uploadProject() {
         pipeline[0] === "Tracking" ||
         pipeline[0] === "Attendance" ||
         pipeline[0] === "Security" ||
+        pipeline[0] === "Smart Security" ||
         pipeline[0] === "Parking Management" ||
         pipeline[0] === "Heatmap" ||
         pipeline[0] === "Color Detection" ||
@@ -656,9 +657,11 @@ async function uploadProject() {
         <p style='color: #ff6b6b; margin-bottom: 10px;'>Invalid pipeline configuration!</p>
         <p><b>Allowed setups:</b></p>
         <ul style='color: #c9d1d9; line-height: 1.6;'>
-            <li>Single model only (Tracking, Attendance, Security, Parking, etc.)</li>
+            <li>Any single model (Tracking, Attendance, Security, Smart Security, Fire &amp; Smoke Detection, Weapon Detection, Parking Management, Heatmap, Color Detection, Object Counting, Gap Detection)</li>
             <li>Object Counting + Gap Detection</li>
             <li>Tracking + Attendance</li>
+            <li>Security + Attendance</li>
+            <li>Smart Security + Tracking</li>
         </ul>
       `;
       openInfoModal("Pipeline Error", errorMsg);

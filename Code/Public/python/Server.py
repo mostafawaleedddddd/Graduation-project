@@ -25,6 +25,7 @@ from heatmap_ipcam import HeatmapBlock
 from NMN1 import ShelfOrchestrator
 from fire_detection import FireSmokeDetector
 from weapon_detection import WeaponDetector                          # ── NEW ──
+
 # ── Dynamic NMN ──────────────────────────────────────────────────────────────
 from NMN import (
     DynamicNMN,
@@ -35,7 +36,13 @@ from NMN import (
 )
 
 # ─── Thread pool for JPEG encoding (keeps async loop free) ───────────────────
-_encode_executor = ThreadPoolExecutor(max_workers=2)
+_encode_executor = ThreadPoolExecutor(max_workers=6)
+
+def _frame_only(result):
+    """Normalize model outputs so the streaming pipeline always receives a frame."""
+    if isinstance(result, tuple):
+        return result[0]
+    return result
 
 
 def _encode_frame(frame, quality: int = 75):
@@ -44,11 +51,38 @@ def _encode_frame(frame, quality: int = 75):
     return buffer.tobytes() if ret else None
 
 
-def _frame_only(result):
-    """Normalize model outputs so the streaming pipeline always receives a frame."""
-    if isinstance(result, tuple):
-        return result[0]
-    return result
+def _open_capture(url: str) -> cv2.VideoCapture:
+    """
+    Open a VideoCapture with settings that prevent the libavutil
+    'Assertion val || !min_size failed' crash under memory pressure.
+
+    Root cause: FFmpeg's default UDP transport drops/corrupts packets when
+    the system is busy (e.g. two cameras + heavy GPU model), causing it to
+    try to allocate a zero-size decode buffer → hard C assertion failure.
+
+    Fixes applied:
+      • rtsp_transport=tcp  — TCP never drops packets mid-stream
+      • buffer_size=65536   — small network buffer, avoids stale data
+      • stimeout=3000000    — 3 s socket timeout so hung reads don't block
+      • CAP_PROP_BUFFERSIZE=1 — keep only the latest decoded frame in memory
+    """
+    url_str = str(url)
+    if url_str.startswith("rtsp://"):
+        # Pass FFmpeg options via the GStreamer/FFmpeg environment string
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+            "rtsp_transport;tcp|"
+            "buffer_size;65536|"
+            "stimeout;3000000"
+        )
+        cap = cv2.VideoCapture(url_str, cv2.CAP_FFMPEG)
+    else:
+        cap = cv2.VideoCapture(url_str)
+
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    return cap
 
 
 # ─── Atomic frame store ───────────────────────────────────────────────────────
@@ -138,7 +172,8 @@ class LiveStreamServer:
         # GPU tensor collisions.  We lazily create and cache them here.
         # Key: camera_id  →  Value: dict of { step_name: model_instance }
         self._per_camera_models: dict[str, dict] = {}
-        self._per_camera_lock = threading.Lock()
+        self._per_camera_nmn: dict[str, DynamicNMN] = {}
+        self._per_camera_lock = threading.RLock()
 
         # ================= 2. DYNAMIC NMN SETUP =================
         # Models are injected ONCE here — NMN never loads them again.
@@ -250,16 +285,7 @@ class LiveStreamServer:
 
             if cap is None or not cap.isOpened():
                 try:
-                    if str(self.camera_source).startswith("rtsp://"):
-                        cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
-                    else:
-                        cap = cv2.VideoCapture(self.camera_source)
-
-                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    cap.set(cv2.CAP_PROP_FPS, 30)
-
+                    cap = _open_capture(self.camera_source)
                 except Exception as e:
                     print(f"❌ Camera connection error: {e}")
                     time.sleep(1)
@@ -300,9 +326,12 @@ class LiveStreamServer:
                         # For heavy NMN pipelines reuse last output on skip frames
                         cached = self.latest_output.get_nowait()
                         if cached is not None:
-                            frame = cached
-                    else:
-                        frame = self.nmn.process(frame)
+                            # Serve the last annotated frame; skip reprocessing
+                            self.latest_output.put(cached)
+                            continue
+                        # No cached output yet (very first frames) — fall through
+                        # to run NMN anyway so we don't emit a black frame
+                    frame = self.nmn.process(frame)
 
                     self.latest_output.put(frame)
                     continue   # skip the classic pipeline below
@@ -382,12 +411,123 @@ class LiveStreamServer:
                 print(f"🔧 Creating dedicated {step} model for camera '{cam_id}'")
                 if step == "Fire & Smoke Detection":
                     cam_models[step] = FireSmokeDetector()
+                elif step == "Tracking":
+                    cam_models[step] = HumanTracker()
+                elif step == "Security":
+                    cam_models[step] = SecuritySystem()
+                elif step == "Attendance":
+                    cam_models[step] = AttendanceSystem()
+                elif step == "Object Counting":
+                    cam_models[step] = ObjectCounterBlock()
+                elif step == "Gap Detection":
+                    cam_models[step] = ShelfGapDetector()
+                elif step == "Heatmap":
+                    cam_models[step] = HeatmapBlock()
                 elif step == "Weapon Detection":                                  # ── NEW ──
                     cam_models[step] = WeaponDetector(weights="weapon_best.pt")  # ── NEW ──
                 else:
-                    # Shared/stateless models — return global instance
+                    # Stateless models (Color Detection etc.) — return global instance
                     return None
             return cam_models[step]
+
+    def _build_camera_nmn(self, cam_id: str) -> DynamicNMN:
+        """Create a dedicated per-camera DynamicNMN instance with camera-specific models."""
+        nmn = DynamicNMN(num_workers=4)
+
+        tracker = self._get_camera_model(cam_id, "Tracking") or self.human_tracker
+        attendance = self._get_camera_model(cam_id, "Attendance") or self.attendance
+        security = self._get_camera_model(cam_id, "Security") or self.security
+        heatmap = self._get_camera_model(cam_id, "Heatmap") or self.heatmap
+        object_counter = self._get_camera_model(cam_id, "Object Counting") or self.object_counter
+        gap_detector = self._get_camera_model(cam_id, "Gap Detection") or self.gap_detector
+        parking_model = self._get_camera_model(cam_id, "Parking Management") or self.parking_model
+        smart_guard = SmartSecurityGuard(enable_email_alerts=True)
+
+        nmn.register(
+            "Tracking",
+            tracker,
+            raw_process_fn=tracker.process,
+            context_extract_fn=tracking_extractor,
+        )
+        nmn.register(
+            "Attendance",
+            attendance,
+            raw_process_fn=attendance.process,
+            context_extract_fn=attendance_extractor,
+        )
+        nmn.register(
+            "Security",
+            security,
+            raw_process_fn=security.process,
+        )
+        nmn.register(
+            "Heatmap",
+            heatmap,
+            raw_process_fn=heatmap.process,
+        )
+        nmn.register(
+            "Object Counting",
+            object_counter,
+            raw_process_fn=lambda f, _oc=object_counter: _oc.process(f)[0],
+            context_extract_fn=object_count_extractor,
+        )
+        nmn.register(
+            "Gap Detection",
+            gap_detector,
+            raw_process_fn=gap_detector.process,
+        )
+        nmn.register(
+            "Color Detection",
+            None,
+            raw_process_fn=apply_color_detection,
+        )
+        nmn.register(
+            "Parking Management",
+            parking_model,
+            raw_process_fn=parking_model.process,
+        )
+        nmn.register(
+            "Smart Security",
+            smart_guard,
+            raw_process_fn=smart_guard.process,
+        )
+
+        return nmn
+
+    def _get_camera_nmn(self, cam_id: str, pipeline: list) -> DynamicNMN:
+        """
+        Return the per-camera NMN instance, creating it on first use.
+        set_modules() is called ONLY when the pipeline list actually changes —
+        NOT on every frame — because it rebuilds the execution graph (expensive)
+        and acquires the NMN's internal lock.  Calling it per-frame caused the
+        deadlock/crash when NMN + split view were active simultaneously.
+        """
+        pipeline_key = tuple(pipeline)
+        with self._per_camera_lock:
+            if cam_id not in self._per_camera_nmn:
+                print(f"🔧 Creating per-camera NMN instance for camera '{cam_id}'")
+                nmn = self._build_camera_nmn(cam_id)
+                self._per_camera_nmn[cam_id] = nmn
+                # Record which pipeline this NMN was last configured for
+                self._per_camera_nmn_pipeline: dict
+                if not hasattr(self, "_per_camera_nmn_pipeline"):
+                    self._per_camera_nmn_pipeline = {}
+                self._per_camera_nmn_pipeline[cam_id] = None   # force set_modules below
+
+            nmn = self._per_camera_nmn[cam_id]
+            if not hasattr(self, "_per_camera_nmn_pipeline"):
+                self._per_camera_nmn_pipeline = {}
+            last_key = self._per_camera_nmn_pipeline.get(cam_id)
+
+        # set_modules() is cheap on the same graph but still rebuilds — only
+        # call it when the pipeline actually changed.
+        if last_key != pipeline_key:
+            nmn.set_modules(pipeline)
+            with self._per_camera_lock:
+                self._per_camera_nmn_pipeline[cam_id] = pipeline_key
+            print(f"🧩 NMN graph updated for camera '{cam_id}': {pipeline}")
+
+        return nmn
 
     # ================= MJPEG STREAM ===========================================
     async def generate_frames(self):
@@ -491,18 +631,20 @@ class LiveStreamServer:
                     print(f"   Graph: {self.nmn.get_graph_info()}")
                 else:
                     self._nmn_active = False
-
-                if "Parking Management" in new_pipeline:
-                    def setup():
-                        self.running = False
-                        self.parking_model.run_setup()
-                        self.running = True
-                    threading.Thread(target=setup, daemon=True).start()
+            elif _pipeline_uses_nmn(new_pipeline):
+                # Ensure split-camera NMN instances are prepared when pipeline
+                # changes. This avoids processing with a stale or empty graph.
+                # Invalidate the cached pipeline key so set_modules() fires on
+                # the next frame, then eagerly create the NMN if it doesn't exist.
+                if hasattr(self, "_per_camera_nmn_pipeline"):
+                    with self._per_camera_lock:
+                        self._per_camera_nmn_pipeline[camera_id] = None  # force rebuild
+                self._get_camera_nmn(camera_id, new_pipeline)
 
             return {
                 "status":     "ok",
                 "camera_id":  camera_id,
-                "nmn_active": self._nmn_active,
+                "nmn_active": _pipeline_uses_nmn(new_pipeline),
             }
 
         @self.app.post("/set_camera")
@@ -551,15 +693,20 @@ class LiveStreamServer:
 
             async def raw_frames(cam_url: str):
                 loop = asyncio.get_event_loop()
-                cap = [cv2.VideoCapture(cam_url)]
-                cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                if not cap[0].isOpened():
-                    print(f"❌ video_raw: failed to open camera source {cam_url!r}")
-                    await loop.run_in_executor(None, cap[0].release)
+
+                def _safe_open(u):
+                    try:
+                        return _open_capture(u)
+                    except Exception as e:
+                        print(f"❌ video_raw open error: {e}")
+                        return None
+
+                cap = [await loop.run_in_executor(None, _safe_open, cam_url)]
+                if cap[0] is None or not cap[0].isOpened():
+                    print(f"❌ video_raw: failed to open {cam_url!r}")
                     await asyncio.sleep(1)
-                    cap[0] = cv2.VideoCapture(cam_url)
-                    cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    if not cap[0].isOpened():
+                    cap[0] = await loop.run_in_executor(None, _safe_open, cam_url)
+                    if cap[0] is None or not cap[0].isOpened():
                         print(f"❌ video_raw: persistent open failure for {cam_url!r}")
                         return
                 try:
@@ -568,8 +715,7 @@ class LiveStreamServer:
                         if not ret or frame is None:
                             await asyncio.sleep(0.2)
                             await loop.run_in_executor(None, cap[0].release)
-                            cap[0] = cv2.VideoCapture(cam_url)
-                            cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                            cap[0] = await loop.run_in_executor(None, _safe_open, cam_url) or cv2.VideoCapture()
                             continue
                         jpeg = await loop.run_in_executor(_encode_executor, _encode_frame, frame, 70)
                         if jpeg is None:
@@ -577,7 +723,8 @@ class LiveStreamServer:
                         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
                         await asyncio.sleep(0)
                 finally:
-                    cap[0].release()
+                    if cap[0]:
+                        cap[0].release()
 
             return StreamingResponse(raw_frames(url),
                                      media_type="multipart/x-mixed-replace; boundary=frame")
@@ -606,27 +753,40 @@ class LiveStreamServer:
                     return
 
                 print(f"▶ video_processed: {cam_id} → {cam_url}")
-                cap = [cv2.VideoCapture(cam_url)]
-                cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                if not cap[0].isOpened():
+
+                def _safe_open_proc(u):
+                    try:
+                        return _open_capture(u)
+                    except Exception as e:
+                        print(f"❌ video_processed open error [{cam_id}]: {e}")
+                        return None
+
+                cap = [await loop.run_in_executor(None, _safe_open_proc, cam_url)]
+                if cap[0] is None or not cap[0].isOpened():
                     print(f"❌ video_processed: failed to open camera source {cam_url!r}")
-                    await loop.run_in_executor(None, cap[0].release)
                     await asyncio.sleep(1)
-                    cap[0] = cv2.VideoCapture(cam_url)
-                    cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    if not cap[0].isOpened():
+                    cap[0] = await loop.run_in_executor(None, _safe_open_proc, cam_url)
+                    if cap[0] is None or not cap[0].isOpened():
                         print(f"❌ video_processed: persistent open failure for {cam_url!r}")
                         return
                 frame_count = 0
+                last_processed_frame = None   # cache last good NMN output for skip frames
+
+                def _read_latest(cap_obj):
+                    """Drain stale frames from the camera buffer, then decode only
+                    the most recent one. Prevents the 10-second delay that builds
+                    up when model inference is slower than the camera's source FPS."""
+                    for _ in range(3):
+                        cap_obj.grab()
+                    return cap_obj.retrieve()
 
                 try:
                     while True:
-                        ret, frame = await loop.run_in_executor(None, cap[0].read)
+                        ret, frame = await loop.run_in_executor(None, _read_latest, cap[0])
                         if not ret or frame is None:
                             await asyncio.sleep(0.2)
                             await loop.run_in_executor(None, cap[0].release)
-                            cap[0] = cv2.VideoCapture(cam_url)
-                            cap[0].set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                            cap[0] = await loop.run_in_executor(None, _safe_open_proc, cam_url) or cv2.VideoCapture()
                             continue
 
                         frame = cv2.resize(frame, (640, 480))
@@ -638,39 +798,36 @@ class LiveStreamServer:
                             if pipeline:
                                 if _pipeline_uses_nmn(pipeline):
                                     if run_heavy:
-                                        frame = server_ref.nmn.process(frame)
+                                        cam_nmn = server_ref._get_camera_nmn(cam_id, pipeline)
+                                        frame = cam_nmn.process(frame)
+                                        last_processed_frame = frame   # cache for skip frames
+                                    elif last_processed_frame is not None:
+                                        # Reuse the last NMN-processed frame on skip frames
+                                        # so the stream always shows annotated output
+                                        frame = last_processed_frame
                                 else:
                                     for step in pipeline:
                                         if not run_heavy and step in HEAVY_MODELS:
                                             continue
                                         if step == "Color Detection":
                                             frame = apply_color_detection(frame)
-                                        elif step == "Tracking":
-                                            frame = server_ref.human_tracker.process(frame)
-                                        elif step == "Object Counting":
-                                            frame, _ = server_ref.object_counter.process(frame)
-                                        elif step == "Gap Detection":
-                                            frame = server_ref.gap_detector.process(frame)
-                                        elif step == "Attendance":
-                                            frame = server_ref.attendance.process(frame)
-                                        elif step == "Security":
-                                            frame = server_ref.security.process(frame)
+
                                         elif step == "Parking Management":
-                                            frame = _frame_only(server_ref.parking_model.process(frame))
-                                        elif step == "Heatmap":
-                                            frame = server_ref.heatmap.process(frame)
-                                        elif step == "Fire & Smoke Detection":
-                                            # Use a dedicated per-camera instance to avoid
-                                            # concurrent GPU tensor collisions between panels.
-                                            fire_model = server_ref._get_camera_model(cam_id, step)
-                                            if fire_model is None:
-                                                fire_model = server_ref.fire_smoke_detector
-                                            frame = fire_model.process(frame)
-                                        elif step == "Weapon Detection":                     # ── NEW ──
-                                            weapon_model = server_ref._get_camera_model(cam_id, step)
-                                            if weapon_model is None:
-                                                weapon_model = server_ref.weapon_detector
-                                            frame = weapon_model.process(frame)
+                                            model = _frame_only(server_ref.parking_model.process(frame))
+                                            if model is None:
+                                                model = server_ref.parking_model
+                                            frame = model.process(frame)
+                                        else:
+                                            # All YOLO-based models get a dedicated
+                                            # per-camera instance to avoid concurrent
+                                            # GPU tensor collisions between panels.
+                                            model = server_ref._get_camera_model(cam_id, step)
+                                            if model is None:
+                                                continue  # unrecognised / stateless step
+                                            if step == "Object Counting":
+                                                frame, _ = model.process(frame)
+                                            else:
+                                                frame = model.process(frame)
                         except Exception as e:
                             import traceback
                             print(f"⚠️ Split pipeline error [{cam_id}]: {e}")

@@ -17,7 +17,7 @@ class FireSmokeDetector:
     # resetting a genuine 3-second fire alarm)
     GAP_TOLERANCE = 1.0
 
-    def __init__(self, weights="best_fire_2.pt", conf=0.45, iou=0.50, imgsz=512):
+    def __init__(self, weights="best_fire_2.pt", conf=0.65, iou=0.50, imgsz=512):
 
         # ================= LOAD MODEL ON GPU =================
         print("🔄 Loading Fire & Smoke model on GPU...")
@@ -33,8 +33,8 @@ class FireSmokeDetector:
 
         # Class names — order matches how the model was trained
         self.class_names = {0: "fire", 1: "smoke"}
-        self.colors      = {0: (0, 80, 255),    # fire  → red-orange (BGR)
-                            1: (160, 160, 160)}  # smoke → grey
+        self.colors      = {0: (160, 160, 160),    # fire  → red-orange (BGR)
+                            1: (0, 80, 255)}  # smoke → grey
 
         # ================= ALERT TRACKING =================
         self.alert_log   = []          # list of {class, confidence, time}

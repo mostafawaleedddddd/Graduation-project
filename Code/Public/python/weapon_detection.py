@@ -4,7 +4,7 @@ import torch
 import time
 from datetime import datetime
 from ultralytics import YOLO
-import face_recognition  # <-- NEW: Added for facial memorization
+# import face_recognition  # <-- NEW: Added for facial memorization
 
 class WeaponDetector:
 
