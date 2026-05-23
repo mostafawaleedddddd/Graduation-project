@@ -29,8 +29,18 @@ app.use("/", require("./routes/MainRoutes"));
 // app.use("/auth", require("./routes/AuthRoutes"));
 app.use("/user", require("./routes/UserRoutes"));
 
-// Server
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`ModuVision running on http://localhost:${PORT}`);
+// Error handler middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
+
+// Server
+const PORT = process.env.PORT || 3000;
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`ModuVision running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
