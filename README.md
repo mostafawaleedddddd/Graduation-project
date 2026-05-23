@@ -1,5 +1,4 @@
-```markdown
-# 👁️ ModuVision
+## 👁️ ModuVision
 
 ModuVision is a web-based security and surveillance platform built with Node.js, Express, EJS, and MongoDB. It combines user authentication, camera management, project configuration, and attendance-class workflows with a collection of Python-based computer vision tools.
 
@@ -7,19 +6,19 @@ ModuVision is a web-based security and surveillance platform built with Node.js,
 
 The application is designed to support:
 
-* **🔐 Secure Access:** User sign up, login, and session-based access control.
-* **📹 Device Control:** Camera management for each authenticated user.
-* **⚙️ Custom Pipelines:** Project creation with a modular pipeline of computer vision features.
-* **👥 Smart Tracking:** Attendance class creation using image uploads and saved face reference data.
-* **🧠 AI Power:** Integration with Python vision scripts located under `Code/Public/python` for advanced detection and recognition.
+* 🔐 Secure Access:** User sign up, login, and session-based access control.
+* 📹 Device Control:** Camera management for each authenticated user.
+* ⚙️ Custom Pipelines:** Project creation with a modular pipeline of computer vision features.
+* 👥 Smart Tracking:** Attendance class creation using image uploads and saved face reference data.
+* 🧠 AI Power:** Integration with Python vision scripts located under `Code/Public/python` for advanced detection and recognition.
 
 ## ✨ Key Features
 
-* **🔐 Authentication**: Users can register accounts, log in, and receive a session-based dashboard experience.
-* **📹 Camera Support**: Add, list, retrieve, and delete camera entries by name and URL.
-* **📁 Project Management**: Create and manage user-specific projects with selected vision pipeline stages.
-* **👩‍🏫 Attendance Classes**: Upload face images into named classes, view classes, add more images, and delete classes.
-* **🐍 Python Vision Integration**: The repository includes a folder of vision scripts for tasks such as weapon detection, fire detection, tracking, and attendance.
+* 🔐 Authentication**: Users can register accounts, log in, and receive a session-based dashboard experience.
+* 📹 Camera Support**: Add, list, retrieve, and delete camera entries by name and URL.
+* 📁 Project Management**: Create and manage user-specific projects with selected vision pipeline stages.
+* 👩‍🏫 Attendance Classes**: Upload face images into named classes, view classes, add more images, and delete classes.
+* 🐍 Python Vision Integration**: The repository includes a folder of vision scripts for tasks such as weapon detection, fire detection, tracking, and attendance.
 
 ## 📂 Repository Structure
 
