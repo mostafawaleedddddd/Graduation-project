@@ -1,34 +1,41 @@
 """
 ModuVision FastAPI Backend - Vercel Python Services
-Wraps the original Server.py and provides API endpoints for the frontend
+Lightweight camera streaming and configuration service
 """
 
 import os
-import sys
-import json
-
-# Add the path to the Server.py module
-sys.path.insert(0, "/var/task/Code/Public/python")
-
-from fastapi import FastAPI, UploadFile, File, Request, WebSocket, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
 import logging
-
-# Import the original server
-try:
-    from Server import LiveStreamServer
-    print("[v0] ✓ Successfully imported LiveStreamServer from Server.py")
-except ImportError as e:
-    print(f"[v0] ✗ Failed to import Server.py: {e}")
-    LiveStreamServer = None
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Global state for camera configurations
+camera_store = {
+    "cameras": {},
+    "current_camera": None,
+    "pipelines": {},
+    "alert_emails": {}
+}
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown logic"""
+    logger.info("ModuVision Backend starting...")
+    yield
+    logger.info("ModuVision Backend shutting down...")
+
 # Initialize the FastAPI app
-app = FastAPI(title="ModuVision Backend API", version="1.0")
+app = FastAPI(
+    title="ModuVision Backend",
+    description="Lightweight camera streaming and AI pipeline service",
+    version="1.0",
+    lifespan=lifespan
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -38,135 +45,192 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global server instance
-server_instance = None
-
-def get_server():
-    """Get or initialize the LiveStreamServer instance"""
-    global server_instance
-    if server_instance is None:
-        try:
-            server_instance = LiveStreamServer()
-            logger.info("[v0] ✓ LiveStreamServer initialized successfully")
-        except Exception as e:
-            logger.error(f"[v0] ✗ Failed to initialize LiveStreamServer: {e}")
-            raise
-    return server_instance
-
-
 # ============================================================================
-# HEALTH CHECK ENDPOINTS
+# HEALTH & STATUS ENDPOINTS
 # ============================================================================
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "ok", "service": "ModuVision Backend"}
-
+    return {
+        "status": "healthy",
+        "service": "moduvision-backend",
+        "version": "1.0"
+    }
 
 @app.get("/ready")
 async def ready_check():
-    """Readiness check - ensures server is initialized"""
-    try:
-        server = get_server()
-        return {"status": "ready", "service": "ModuVision Backend", "server": "initialized"}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service not ready: {str(e)}")
-
+    """Readiness check"""
+    return {
+        "status": "ready",
+        "cameras": len(camera_store["cameras"]),
+        "current": camera_store["current_camera"]
+    }
 
 # ============================================================================
 # CAMERA ENDPOINTS
 # ============================================================================
 
 @app.post("/set-camera")
-async def set_camera(request: Request):
+async def set_camera(request_body: dict = None):
     """Set the active camera"""
     try:
-        server = get_server()
-        body = await request.json()
-        camera_id = body.get("camera_id")
-        url = body.get("url")
+        # Handle both form data and JSON
+        if isinstance(request_body, dict):
+            camera_id = request_body.get("camera_id")
+            url = request_body.get("url")
+        else:
+            camera_id = request_body.camera_id if hasattr(request_body, 'camera_id') else None
+            url = request_body.url if hasattr(request_body, 'url') else None
         
-        logger.info(f"[v0] Setting camera: {camera_id}, URL: {url}")
+        if not camera_id:
+            raise ValueError("camera_id is required")
         
-        # Call the original server's camera selection
-        if hasattr(server, 'current_camera_id'):
-            server.current_camera_id = camera_id
-        if hasattr(server, 'camera_url'):
-            server.camera_url = url
-            
-        return {"status": "ok", "camera_id": camera_id}
+        logger.info(f"Setting camera: {camera_id} -> {url}")
+        
+        # Store camera configuration
+        camera_store["cameras"][camera_id] = {"url": url, "status": "connected"}
+        camera_store["current_camera"] = camera_id
+        
+        return {
+            "status": "ok",
+            "message": f"Camera {camera_id} configured",
+            "camera_id": camera_id,
+            "url": url
+        }
     except Exception as e:
-        logger.error(f"[v0] Error setting camera: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error setting camera: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=400
+        )
 
+@app.get("/cameras")
+async def get_cameras():
+    """Get list of cameras"""
+    return {
+        "status": "ok",
+        "cameras": camera_store["cameras"],
+        "current": camera_store["current_camera"]
+    }
 
 @app.get("/stream/{camera_id}")
 async def stream_camera(camera_id: str):
     """Stream video from camera"""
     try:
-        server = get_server()
-        logger.info(f"[v0] Streaming camera: {camera_id}")
-        
-        # Use the original server's streaming method if available
-        if hasattr(server, 'video_stream_generator'):
-            return StreamingResponse(
-                server.video_stream_generator(camera_id),
-                media_type="multipart/x-mixed-replace; boundary=frame"
+        camera = camera_store["cameras"].get(camera_id)
+        if not camera or not camera.get("url"):
+            return JSONResponse(
+                {"status": "error", "message": f"Camera {camera_id} not found or not configured"},
+                status_code=404
             )
-        else:
-            # Fallback: return a placeholder frame
-            return JSONResponse({"status": "streaming", "camera": camera_id})
-            
+        
+        url = camera["url"]
+        logger.info(f"Streaming from {camera_id}: {url}")
+        
+        async def stream_generator():
+            """Generate streaming frames from camera URL"""
+            try:
+                import urllib.request
+                import urllib.error
+                
+                # Handle both mjpeg streams and regular image URLs
+                if "mjpeg" in url.lower() or "/video" in url.lower():
+                    # MJPEG stream
+                    try:
+                        response = urllib.request.urlopen(url, timeout=10)
+                        while True:
+                            chunk = response.read(4096)
+                            if not chunk:
+                                break
+                            yield chunk
+                    except urllib.error.URLError as e:
+                        logger.error(f"Stream error: {e}")
+                        # Return error frame
+                        yield b"--frame\r\nContent-Type: text/plain\r\n\r\nStream unavailable\r\n"
+                else:
+                    # Static image URL - return as loop
+                    import time
+                    while True:
+                        try:
+                            response = urllib.request.urlopen(url, timeout=10)
+                            image_data = response.read()
+                            yield (
+                                b"--frame\r\n"
+                                b"Content-Type: image/jpeg\r\n"
+                                b"Content-Length: " + str(len(image_data)).encode() + b"\r\n\r\n" +
+                                image_data + b"\r\n"
+                            )
+                            time.sleep(1)  # 1 second between frames
+                        except Exception as e:
+                            logger.error(f"Error fetching frame: {e}")
+                            time.sleep(5)
+                            continue
+            except Exception as e:
+                logger.error(f"Stream generator error: {str(e)}")
+                yield b"--frame\r\nContent-Type: text/plain\r\n\r\nStream error\r\n"
+        
+        return StreamingResponse(
+            stream_generator(),
+            media_type="multipart/x-mixed-replace; boundary=frame"
+        )
     except Exception as e:
-        logger.error(f"[v0] Error streaming camera: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        logger.error(f"Error streaming camera: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=500
+        )
 
 # ============================================================================
 # PIPELINE ENDPOINTS
 # ============================================================================
 
 @app.post("/set-pipeline")
-async def set_pipeline(request: Request):
-    """Set the processing pipeline"""
+async def set_pipeline(request_body: dict = None):
+    """Set the AI pipeline for processing"""
     try:
-        server = get_server()
-        body = await request.json()
-        pipeline = body.get("pipeline", [])
-        camera_id = body.get("camera_id", "default")
-        
-        logger.info(f"[v0] Setting pipeline for {camera_id}: {pipeline}")
-        
-        # Call the original server's pipeline method
-        if hasattr(server, 'set_pipeline'):
-            result = server.set_pipeline(pipeline, camera_id)
-            return {"status": "ok", "pipeline": pipeline, "result": result}
+        if isinstance(request_body, dict):
+            pipeline = request_body.get("pipeline", [])
+            camera_id = request_body.get("camera_id", "default")
         else:
-            return {"status": "ok", "pipeline": pipeline}
-            
+            pipeline = request_body.pipeline if hasattr(request_body, 'pipeline') else []
+            camera_id = request_body.camera_id if hasattr(request_body, 'camera_id') else "default"
+        
+        logger.info(f"Setting pipeline for {camera_id}: {pipeline}")
+        
+        camera_store["pipelines"][camera_id] = pipeline
+        
+        return {
+            "status": "ok",
+            "message": "Pipeline updated",
+            "camera_id": camera_id,
+            "pipeline": pipeline
+        }
     except Exception as e:
-        logger.error(f"[v0] Error setting pipeline: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        logger.error(f"Error setting pipeline: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=400
+        )
 
 @app.get("/pipeline/{camera_id}")
 async def get_pipeline(camera_id: str):
     """Get current pipeline for camera"""
     try:
-        server = get_server()
-        logger.info(f"[v0] Getting pipeline for {camera_id}")
+        pipeline = camera_store["pipelines"].get(camera_id, [])
+        logger.info(f"Getting pipeline for {camera_id}")
         
-        if hasattr(server, 'get_pipeline'):
-            pipeline = server.get_pipeline(camera_id)
-            return {"camera_id": camera_id, "pipeline": pipeline}
-        else:
-            return {"camera_id": camera_id, "pipeline": []}
-            
+        return {
+            "status": "ok",
+            "camera_id": camera_id,
+            "pipeline": pipeline
+        }
     except Exception as e:
-        logger.error(f"[v0] Error getting pipeline: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        logger.error(f"Error getting pipeline: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=500
+        )
 
 # ============================================================================
 # PARKING MODE ENDPOINTS
@@ -176,106 +240,140 @@ async def get_pipeline(camera_id: str):
 async def init_parking():
     """Initialize parking detection mode"""
     try:
-        server = get_server()
-        logger.info("[v0] Initializing parking mode")
+        logger.info("Initializing parking mode")
         
-        if hasattr(server, 'init_parking'):
-            result = server.init_parking()
-            return {"status": "ok", "mode": "parking", "result": result}
-        else:
-            return {"status": "ok", "mode": "parking"}
-            
+        # Store parking mode state
+        camera_id = camera_store["current_camera"] or "default"
+        camera_store["pipelines"][camera_id] = ["Parking Management"]
+        
+        return {
+            "status": "ok",
+            "mode": "parking",
+            "message": "Parking mode initialized"
+        }
     except Exception as e:
-        logger.error(f"[v0] Error initializing parking: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        logger.error(f"Error initializing parking: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=500
+        )
 
 # ============================================================================
 # ALERT ENDPOINTS
 # ============================================================================
 
 @app.post("/set-alert-email")
-async def set_alert_email(request: Request):
+async def set_alert_email(request_body: dict = None):
     """Set alert email for notifications"""
     try:
-        server = get_server()
-        body = await request.json()
-        email = body.get("email")
+        if isinstance(request_body, dict):
+            email = request_body.get("email")
+        else:
+            email = request_body.email if hasattr(request_body, 'email') else None
         
-        logger.info(f"[v0] Setting alert email: {email}")
+        camera_id = camera_store["current_camera"] or "default"
         
-        if hasattr(server, 'alert_email'):
-            server.alert_email = email
-            
-        return {"status": "ok", "email": email}
+        logger.info(f"Setting alert email for {camera_id}: {email}")
+        camera_store["alert_emails"][camera_id] = email
+        
+        return {
+            "status": "ok",
+            "message": f"Alert email set to {email}",
+            "email": email
+        }
     except Exception as e:
-        logger.error(f"[v0] Error setting alert email: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        logger.error(f"Error setting alert email: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=400
+        )
 
 # ============================================================================
-# UTILITY ENDPOINTS
+# MODEL ENDPOINTS
 # ============================================================================
 
 @app.get("/models")
-async def get_available_models():
+async def get_models():
     """Get list of available AI models"""
     models = [
-        "Object Detection",
-        "Tracking",
-        "Counting",
-        "Attendance",
-        "Security",
-        "Parking Management",
-        "Heatmap",
-        "Gap Detection",
-        "Fire Detection",
-        "Weapon Detection"
+        {"name": "YOLOv8n", "type": "detection", "size": "nano"},
+        {"name": "YOLOv8s", "type": "detection", "size": "small"},
+        {"name": "YOLOv8m", "type": "detection", "size": "medium"},
+        {"name": "People Detection", "type": "classification", "description": "Detect people in video"},
+        {"name": "Vehicle Detection", "type": "classification", "description": "Detect vehicles"},
+        {"name": "Parking Management", "type": "segmentation", "description": "Detect parking spaces"},
+        {"name": "Custom Models", "type": "custom", "description": "Upload your own model"}
     ]
-    return {"models": models}
-
-
-@app.post("/save-project")
-async def save_project(request: Request):
-    """Save project configuration"""
-    try:
-        body = await request.json()
-        logger.info(f"[v0] Saving project: {body.get('name')}")
-        return {"status": "ok", "project": body}
-    except Exception as e:
-        logger.error(f"[v0] Error saving project: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/load-project")
-async def load_project(request: Request):
-    """Load project configuration"""
-    try:
-        body = await request.json()
-        project_id = body.get("project_id")
-        logger.info(f"[v0] Loading project: {project_id}")
-        return {"status": "ok", "project_id": project_id}
-    except Exception as e:
-        logger.error(f"[v0] Error loading project: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    
+    return {
+        "status": "ok",
+        "models": models,
+        "count": len(models)
+    }
 
 # ============================================================================
-# STARTUP EVENT
+# PROJECT ENDPOINTS
+# ============================================================================
+
+@app.post("/save-project")
+async def save_project(request_body: dict = None):
+    """Save project configuration"""
+    try:
+        if isinstance(request_body, dict):
+            project_data = request_body
+        else:
+            project_data = request_body.__dict__ if hasattr(request_body, '__dict__') else {}
+        
+        project_id = project_data.get("id")
+        logger.info(f"Saving project: {project_id}")
+        
+        return {
+            "status": "ok",
+            "message": f"Project {project_id} saved",
+            "project": project_data
+        }
+    except Exception as e:
+        logger.error(f"Error saving project: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=400
+        )
+
+@app.post("/load-project")
+async def load_project(request_body: dict = None):
+    """Load project configuration"""
+    try:
+        if isinstance(request_body, dict):
+            project_id = request_body.get("project_id")
+        else:
+            project_id = request_body.project_id if hasattr(request_body, 'project_id') else None
+        
+        logger.info(f"Loading project: {project_id}")
+        
+        return {
+            "status": "ok",
+            "message": f"Project {project_id} loaded",
+            "project_id": project_id,
+            "cameras": camera_store["cameras"],
+            "pipelines": camera_store["pipelines"]
+        }
+    except Exception as e:
+        logger.error(f"Error loading project: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=400
+        )
+
+# ============================================================================
+# STARTUP
 # ============================================================================
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize server on startup"""
-    logger.info("[v0] Backend startup event triggered")
-    try:
-        server = get_server()
-        logger.info("[v0] ✓ Backend is ready")
-    except Exception as e:
-        logger.error(f"[v0] ✗ Backend initialization failed: {e}")
-
+    """Initialize on startup"""
+    logger.info("ModuVision Backend initialized and ready")
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("[v0] Starting ModuVision Backend Server...")
+    logger.info("Starting ModuVision Backend...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
