@@ -22,7 +22,13 @@ app.use(express.static(path.join(__dirname, "public")));
 //database connection
 const mongoose = require("mongoose");
 require('dotenv').config();
-mongoose.connect(process.env.MONGO_URI);
+
+// Connect to MongoDB with error handling
+mongoose.connect(process.env.MONGO_URI)
+  .catch(err => {
+    console.warn("⚠️  MongoDB connection warning (non-critical):", err.message);
+    console.log("ℹ️  Server will run without database, but database features won't work");
+  });
 
 // Routes (MATCH CASE EXACTLY)
 app.use("/", require("./routes/MainRoutes"));
