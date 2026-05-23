@@ -1,13 +1,8 @@
 {
   "version": 2,
-  "buildCommand": "npm --prefix Code install",
+  "buildCommand": "cd Code && npm install",
   "env": {
     "SESSION_SECRET": "moduvision-secret-key-2024",
     "NODE_ENV": "production"
-  },
-  "functions": {
-    "Code/index.js": {
-      "runtime": "nodejs18.x"
-    }
   }
 }
