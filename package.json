@@ -1,0 +1,22 @@
+{
+  "name": "moduvision",
+  "version": "1.0.0",
+  "description": "AI-powered video surveillance system with real-time detection",
+  "private": true,
+  "scripts": {
+    "start": "cd Code && node index.js",
+    "dev": "cd Code && node index.js",
+    "build": "cd Code && npm install && echo 'Build complete'"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "ai",
+    "video",
+    "surveillance",
+    "detection"
+  ],
+  "author": "ModuVision Team",
+  "license": "MIT"
+}
