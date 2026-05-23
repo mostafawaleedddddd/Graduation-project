@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "npm install --prefix Code",
   "framework": "express",
   "env": {
     "SESSION_SECRET": "moduvision-secret-key-2024",
