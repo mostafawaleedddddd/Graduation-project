@@ -1,13 +1,9 @@
 {
-  "buildCommand": "cd Code && npm install",
-  "outputDirectory": "Code",
-  "devCommand": "cd Code && node index.js",
+  "version": 2,
+  "buildCommand": "npm install --prefix Code",
+  "framework": "express",
   "env": {
     "SESSION_SECRET": "moduvision-secret-key-2024",
     "NODE_ENV": "production"
-  },
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/Code/$1" }
-  ]
+  }
 }
