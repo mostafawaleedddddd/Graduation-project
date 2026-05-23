@@ -136,13 +136,14 @@ async function addCamera() {
     return;
   }
 
-  const isValidFormat = /^(rtsp:\/\/|http:\/\/|https:\/\/)((\d{1,3}\.){3}\d{1,3}|localhost|([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(:\d+)?(\/.*)?$/.test(url);
+  const isValidFormat = /^(rtsp:\/\/|http:\/\/|https:\/\/)[^\s]+$/.test(url);
 
   if (!isValidFormat) {
     openInfoModal(
       "Invalid Format",
       `<p style='color: #ff6b6b; margin-bottom: 8px;'>Invalid camera URL format.</p>
-       <p style='font-size: 13px; color: #aaa;'>Must start with <b>rtsp://</b>, <b>http://</b>, or <b>https://</b></p>`
+       <p style='font-size: 13px; color: #aaa;'>Must start with <b>rtsp://</b>, <b>http://</b>, or <b>https://</b></p>
+       <p style='font-size: 12px; color: #999; margin-top: 8px;'>Example: <b>https://192.168.100.61:8080/video</b></p>`
     );
     return;
   }
