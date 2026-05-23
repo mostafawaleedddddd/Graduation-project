@@ -46,7 +46,6 @@ The application is designed to support:
 1. Install dependencies from the `Code` folder:
 
 ```sh
-cd "d:\visual studio code\Graduation-project\Code"
 npm install
 ```
 
