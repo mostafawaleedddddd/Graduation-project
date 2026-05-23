@@ -1,0 +1,19 @@
+{
+  "name": "graduation-project",
+  "version": "1.0.0",
+  "description": "ModuVision - Graduation Project",
+  "main": "Code/index.js",
+  "scripts": {
+    "start": "node Code/index.js",
+    "dev": "node Code/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "ejs": "^4.0.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "mongodb": "^7.0.0",
+    "mongoose": "^9.1.5",
+    "multer": "^2.1.1"
+  }
+}
