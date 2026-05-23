@@ -1,15 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "Code/index.js",
-      "use": "@vercel/node"
+  "experimentalServices": {
+    "frontend": {
+      "entrypoint": "Code/index.js",
+      "routePrefix": "/"
+    },
+    "backend": {
+      "entrypoint": "backend/main.py",
+      "routePrefix": "/api"
     }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "Code/index.js"
-    }
-  ]
+  }
 }

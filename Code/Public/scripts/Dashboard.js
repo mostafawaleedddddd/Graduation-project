@@ -101,7 +101,7 @@ function sendAlertEmailToPython(email) {
     return;
   }
 
-  fetch('/camera-proxy/set-alert-email', {
+  fetch('/api/set-alert-email', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -195,7 +195,7 @@ async function applyCameraSelection(cameraId, url) {
   if (url) body.url = url;
 
   try {
-    await fetch("/camera-proxy/set-camera", {
+    await fetch("/api/set-camera", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -242,7 +242,7 @@ function startCamera() {
   }
 
   showLiveFeedStream(currentCameraId);
-  liveFeedImage.src = `/camera-proxy/stream/${encodeURIComponent(currentCameraId)}?t=${Date.now()}`;
+  liveFeedImage.src = `/api/stream/${encodeURIComponent(currentCameraId)}?t=${Date.now()}`;
 }
 
 function getCameraUrlById(cameraId) {
@@ -251,9 +251,9 @@ function getCameraUrlById(cameraId) {
 
 async function activateParkingMode() {
   try {
-    await fetch("/camera-proxy/init-parking", { method: "POST" });
+    await fetch("/api/init-parking", { method: "POST" });
     alert("Draw parking areas in the opened window, then press ESC");
-    await fetch("/camera-proxy/set-pipeline", {
+    await fetch("/api/set-pipeline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pipeline: ["Parking Management"] })
@@ -513,7 +513,7 @@ async function updateBackendPipeline() {
 
       await Promise.all(
         pendingCameras.map(camId =>
-          fetch("/camera-proxy/set-pipeline", {
+          fetch("/api/set-pipeline", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ pipeline, camera_id: camId })
@@ -523,7 +523,7 @@ async function updateBackendPipeline() {
 
     } else {
       // Single mode — update the active camera directly
-      const response = await fetch("/camera-proxy/set-pipeline", {
+      const response = await fetch("/api/set-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pipeline, camera_id: currentCameraId || "default" })
@@ -539,7 +539,7 @@ async function updateBackendPipeline() {
           const cell = splitGrid.querySelector(`.split-cell[data-index="${idx}"]`);
           if (!cell) continue;
           const img = cell.querySelector('.split-cell-img');
-          img.src = `/camera-proxy/stream/${encodeURIComponent(data.name || "default")}?t=${Date.now()}`;
+          img.src = `/api/stream/${encodeURIComponent(data.name || "default")}?t=${Date.now()}`;
           if (focusedPanelIndex === parseInt(idx)) {
             splitFocusImg.src = img.src;
           }
@@ -698,7 +698,7 @@ async function applyPipelineToCamera(pipeline, cameraIds) {
     });
 
     const results = await Promise.all(cameraIds.map(camId =>
-      fetch("/camera-proxy/set-pipeline", {
+      fetch("/api/set-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pipeline, camera_id: camId })
@@ -713,7 +713,7 @@ async function applyPipelineToCamera(pipeline, cameraIds) {
     if (currentSplitMode <= 1 && currentCameraId && cameraIds.includes(currentCameraId)) {
       const currentCameraUrl = getCameraUrlById(currentCameraId);
       if (currentCameraUrl) {
-        await fetch("/camera-proxy/set-camera", {
+        await fetch("/api/set-camera", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ camera_id: currentCameraId, url: currentCameraUrl })
@@ -2048,7 +2048,7 @@ applyPipelineToCamera = async function(pipeline, cameraIds) {
    contains both "Object Counting" and "Gap Detection".
    Shows a modal popup (styled like the Attendance List modal)
    when gaps >= half of products detected.
-════════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════��════════ */
 
 let _shelfGapPollingTimer = null;   // setInterval handle
 let _shelfGapDismissed    = false;  // true while popup is open / user dismissed
