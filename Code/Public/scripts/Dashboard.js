@@ -101,7 +101,7 @@ function sendAlertEmailToPython(email) {
     return;
   }
 
-  fetch('http://127.0.0.1:5000/set_alert_email', {
+  fetch('/camera-proxy/set-alert-email', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -194,11 +194,15 @@ async function applyCameraSelection(cameraId, url) {
   const body = { camera_id: cameraId };
   if (url) body.url = url;
 
-  await fetch("http://127.0.0.1:5000/set_camera", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
+  try {
+    await fetch("/camera-proxy/set-camera", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+  } catch (err) {
+    console.warn("Failed to set camera on Python server:", err.message);
+  }
 
   const pipeline = cameraPipelines[cameraId] || [];
   clearCanvasBlocks();
@@ -237,9 +241,8 @@ function startCamera() {
     sendAlertEmailToPython(currentUserEmail);
   }
 
-  const suffix = currentCameraId ? `camera_id=${encodeURIComponent(currentCameraId)}&` : "";
   showLiveFeedStream(currentCameraId);
-  liveFeedImage.src = `http://127.0.0.1:5000/video?${suffix}t=${Date.now()}`;
+  liveFeedImage.src = `/camera-proxy/stream/${encodeURIComponent(currentCameraId)}?t=${Date.now()}`;
 }
 
 function getCameraUrlById(cameraId) {
@@ -247,13 +250,18 @@ function getCameraUrlById(cameraId) {
 }
 
 async function activateParkingMode() {
-  await fetch("http://127.0.0.1:5000/init_parking", { method: "POST" });
-  alert("Draw parking areas in the opened window, then press ESC");
-  await fetch("http://127.0.0.1:5000/set_pipeline", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pipeline: ["Parking Management"] })
-  });
+  try {
+    await fetch("/camera-proxy/init-parking", { method: "POST" });
+    alert("Draw parking areas in the opened window, then press ESC");
+    await fetch("/camera-proxy/set-pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pipeline: ["Parking Management"] })
+    });
+  } catch (err) {
+    console.error("Parking mode error:", err);
+    openInfoModal("Error", "<p style='color: #ff6b6b;'>Failed to activate parking mode. Ensure Python server is running.</p>");
+  }
 }
 
 /* ================= CANVAS SYSTEM ================= */
@@ -505,7 +513,7 @@ async function updateBackendPipeline() {
 
       await Promise.all(
         pendingCameras.map(camId =>
-          fetch("http://127.0.0.1:5000/set_pipeline", {
+          fetch("/camera-proxy/set-pipeline", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ pipeline, camera_id: camId })
@@ -515,7 +523,7 @@ async function updateBackendPipeline() {
 
     } else {
       // Single mode — update the active camera directly
-      const response = await fetch("http://127.0.0.1:5000/set_pipeline", {
+      const response = await fetch("/camera-proxy/set-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pipeline, camera_id: currentCameraId || "default" })
@@ -531,7 +539,7 @@ async function updateBackendPipeline() {
           const cell = splitGrid.querySelector(`.split-cell[data-index="${idx}"]`);
           if (!cell) continue;
           const img = cell.querySelector('.split-cell-img');
-          img.src = `http://127.0.0.1:5000/video_raw?url=${encodeURIComponent(data.url)}&t=${Date.now()}`;
+          img.src = `/camera-proxy/stream/${encodeURIComponent(data.name || "default")}?t=${Date.now()}`;
           if (focusedPanelIndex === parseInt(idx)) {
             splitFocusImg.src = img.src;
           }
@@ -690,7 +698,7 @@ async function applyPipelineToCamera(pipeline, cameraIds) {
     });
 
     const results = await Promise.all(cameraIds.map(camId =>
-      fetch("http://127.0.0.1:5000/set_pipeline", {
+      fetch("/camera-proxy/set-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pipeline, camera_id: camId })
@@ -705,7 +713,7 @@ async function applyPipelineToCamera(pipeline, cameraIds) {
     if (currentSplitMode <= 1 && currentCameraId && cameraIds.includes(currentCameraId)) {
       const currentCameraUrl = getCameraUrlById(currentCameraId);
       if (currentCameraUrl) {
-        await fetch("http://127.0.0.1:5000/set_camera", {
+        await fetch("/camera-proxy/set-camera", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ camera_id: currentCameraId, url: currentCameraUrl })

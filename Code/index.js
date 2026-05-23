@@ -28,6 +28,7 @@ mongoose.connect(process.env.MONGO_URI);
 app.use("/", require("./routes/MainRoutes"));
 // app.use("/auth", require("./routes/AuthRoutes"));
 app.use("/user", require("./routes/UserRoutes"));
+app.use("/camera-proxy", require("./routes/CameraProxyRoutes"));
 
 // Error handler middleware
 app.use((err, req, res, next) => {
