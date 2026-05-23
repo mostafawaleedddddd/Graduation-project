@@ -1,7 +1,6 @@
 {
   "version": 2,
   "buildCommand": "cd Code && npm ci",
-  "startCommand": "cd Code && node index.js",
   "env": {
     "SESSION_SECRET": "moduvision-secret-key-2024",
     "NODE_ENV": "production"
