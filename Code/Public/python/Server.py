@@ -114,7 +114,7 @@ class AtomicFrame:
 
 
 # ─── Frame-skip config ────────────────────────────────────────────────────────
-HEAVY_MODELS = {"Attendance", "Security", "Shelf Orchestrator", "Gap Detection", "Heatmap"}
+HEAVY_MODELS = {"Attendance", "Security", "Shelf Orchestrator", "Gap Detection", "Heatmap", "Weapon Detection"}
 SKIP_N       = 2
 
 # ─── NMN is active when this set of module names is the pipeline ─────────────
@@ -125,6 +125,7 @@ NMN_TRIGGER_SETS = [
     {"Security",   "Attendance"},
     {"Heatmap",    "Tracking"},           
     {"Attendance", "Security", "Tracking"},
+    {"Weapon Detection", "Tracking"},
     {"Smart Security", "Tracking"}
     
 ]
@@ -164,7 +165,7 @@ class LiveStreamServer:
         self.heatmap             = HeatmapBlock()
         self.shelf_orchestrator  = ShelfOrchestrator()
         self.fire_smoke_detector = FireSmokeDetector()
-        self.weapon_detector     = WeaponDetector(weights="weapon_best.pt")  # ── NEW ──
+        self.weapon_detector     = WeaponDetector(weights="weapon_best.pt")
 
         # ================= PER-CAMERA MODEL INSTANCES =================
         # Models that are NOT thread-safe (e.g. any YOLO-based detector)
@@ -232,6 +233,12 @@ class LiveStreamServer:
             "Parking Management",
             self.parking_model,
             raw_process_fn=lambda f: _frame_only(self.parking_model.process(f)),
+        )
+
+        self.nmn.register(
+            "Weapon Detection",
+            self.weapon_detector,
+            raw_process_fn=self.weapon_detector.process,
         )
 
         self.smart_security_guard = SmartSecurityGuard(enable_email_alerts=True)
@@ -485,6 +492,12 @@ class LiveStreamServer:
             "Parking Management",
             parking_model,
             raw_process_fn=parking_model.process,
+        )
+        weapon_detector = self._get_camera_model(cam_id, "Weapon Detection") or self.weapon_detector
+        nmn.register(
+            "Weapon Detection",
+            weapon_detector,
+            raw_process_fn=weapon_detector.process,
         )
         nmn.register(
             "Smart Security",

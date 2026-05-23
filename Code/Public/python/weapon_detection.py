@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import time
 from datetime import datetime
+from typing import List, Optional, Tuple
 from ultralytics import YOLO
-# import face_recognition  # <-- NEW: Added for facial memorization
 
 class WeaponDetector:
 
@@ -66,47 +66,49 @@ class WeaponDetector:
         self._streak_start: dict[str, float | None] = {cls: None for cls in self.ALERT_THRESHOLDS}
         self._last_seen: dict[str, float] = {cls: 0.0 for cls in self.ALERT_THRESHOLDS}
 
-        # ================= FACE MEMORIZATION (NEW) =================
-        self.known_face_encodings = []
-        self.known_face_ids = []
-        self.next_person_id = 1
-
         print("✅ WeaponDetector ready")
 
+    def _box_iou(self, a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
+        x1 = max(a[0], b[0])
+        y1 = max(a[1], b[1])
+        x2 = min(a[2], b[2])
+        y2 = min(a[3], b[3])
+        inter_w = max(0, x2 - x1)
+        inter_h = max(0, y2 - y1)
+        inter = inter_w * inter_h
+        if inter == 0:
+            return 0.0
+        area_a = (a[2] - a[0]) * (a[3] - a[1])
+        area_b = (b[2] - b[0]) * (b[3] - b[1])
+        return inter / (area_a + area_b - inter + 1e-6)
+
+    def _assign_track_id(
+        self,
+        box: Tuple[int, int, int, int],
+        tracked_boxes: Optional[List[Tuple[int, list[int]]]],
+    ) -> Optional[int]:
+        if not tracked_boxes:
+            return None
+
+        best_iou = 0.0
+        best_id = None
+        for track_id, coords in tracked_boxes:
+            track_box = tuple(map(int, coords))
+            iou = self._box_iou(box, track_box)
+            if iou > best_iou:
+                best_iou = iou
+                best_id = track_id
+
+        return best_id if best_iou >= 0.05 else None
+
     # ================= PROCESS FRAME =================
-    def process(self, frame: np.ndarray) -> np.ndarray:
+    def process(
+        self,
+        frame: np.ndarray,
+        tracked_boxes: Optional[List[Tuple[int, list[int]]]] = None,
+    ) -> np.ndarray:
         self.frame_count += 1
         now = time.monotonic()
-
-
-        # face_recognition requires RGB format
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Find face locations and compute encodings (the "memory" of the face)
-        face_locations = face_recognition.face_locations(rgb_frame)
-        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-
-        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-            # Check if this face matches any face we have seen before
-            matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding, tolerance=0.6)
-            person_id = None
-            
-            if True in matches:
-                # We've seen this person before, get their existing ID
-                first_match_index = matches.index(True)
-                person_id = self.known_face_ids[first_match_index]
-            else:
-                # This is a new face! Memorize it.
-                self.known_face_encodings.append(face_encoding)
-                self.known_face_ids.append(self.next_person_id)
-                person_id = self.next_person_id
-                self.next_person_id += 1
-
-            # Draw the face bounding box and ID
-            face_label = f"Person ID: {person_id}"
-            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-            cv2.putText(frame, face_label, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
-
 
         # ── 2. WEAPON DETECTION (EXISTING) ──────────────────────────────────
         results = self.model.predict(
@@ -131,6 +133,12 @@ class WeaponDetector:
                 color    = self.colors.get(cls_id, (0, 255, 0))
                 label    = f"{cls_name.upper()} ({conf_sc:.2f})"
 
+                if tracked_boxes is not None:
+                    track_id = self._assign_track_id((x1, y1, x2, y2), tracked_boxes)
+                    if track_id is not None:
+                        label += f" | ID {track_id}"
+                        color = (0, 255, 255)
+
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.65, 2)
                 cv2.rectangle(frame, (x1, y1 - th - 10), (x1 + tw + 6, y1), color, -1)
@@ -151,6 +159,13 @@ class WeaponDetector:
                     self._streak_start[cls_name] = None
 
         return frame
+
+    def process_with_context(
+        self,
+        frame: np.ndarray,
+        tracked_boxes: Optional[List[Tuple[int, list[int]]]] = None,
+    ) -> np.ndarray:
+        return self.process(frame, tracked_boxes)
 
     # ================= ALERT STATUS & LOGGING =================
     def get_alert_status(self) -> dict:

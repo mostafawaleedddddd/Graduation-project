@@ -624,7 +624,8 @@ async function uploadProject() {
       ["Object Counting", "Gap Detection"],
       ["Tracking", "Attendance"],
       ["Security", "Attendance"],
-      ["Smart Security", "Tracking"]
+      ["Smart Security", "Tracking"],
+      ["Weapon Detection", "Tracking"]
     ];
 
     const isSingle = pipeline.length === 1;

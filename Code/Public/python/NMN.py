@@ -89,6 +89,7 @@ MODULE_DEPS: Dict[str, List[str]] = {
     "Security":           ["Tracking", "Attendance"],
     "Heatmap":            ["Tracking"],         # centroid-driven accumulation
     "Gap Detection":      ["Object Counting"],  # gap logic enriched by counts
+    "Weapon Detection":   ["Tracking"],         # use tracked person boxes to associate weapons with people
     # ── Smart Security: needs Tracking for person ROIs and Attendance for ID ─
     "Smart Security":     ["Tracking", "Attendance"],
 }
@@ -405,6 +406,14 @@ class DynamicNMN:
             if bridge:
                 logger.info("[NMN] Bridge installed: Heatmap ← Tracking")
 
+        # Weapon Detection ← Tracking
+        if "Weapon Detection" in self._modules:
+            bridge = bridge_weapon_tracking \
+                if ("Weapon Detection" in active and "Tracking" in active) else None
+            self._modules["Weapon Detection"].set_bridge(bridge)
+            if bridge:
+                logger.info("[NMN] Bridge installed: Weapon Detection ← Tracking")
+
         # Gap Detection ← Object Counting  (context only, no visual bridge needed)
         # The context extractor on Object Counting already writes "object_counts"
         # which GapDetector can read if it checks ctx.get("object_counts").
@@ -708,6 +717,28 @@ def bridge_heatmap_tracking(
                 model.update_centroids(centroids)
             except Exception as exc:
                 logger.debug("[NMN] heatmap_bridge update_centroids failed: %s", exc)
+
+    return model.process(frame)
+
+
+def bridge_weapon_tracking(
+    frame: np.ndarray,
+    ctx: FrameContext,
+    model: Any,
+) -> np.ndarray:
+    """
+    Weapon Detection guided by Tracking.
+
+    If the weapon detector supports process_with_context, pass person boxes
+    from the tracker so weapons can be associated with track IDs.
+    """
+    tracked_boxes = ctx.get("tracked_boxes", [])
+
+    if tracked_boxes and hasattr(model, "process_with_context"):
+        try:
+            return model.process_with_context(frame, tracked_boxes)
+        except Exception as exc:
+            logger.debug("[NMN] weapon_bridge process_with_context failed: %s", exc)
 
     return model.process(frame)
 
