@@ -6,12 +6,8 @@
   "scripts": {
     "start": "cd Code && node index.js",
     "dev": "cd Code && node index.js",
-    "build": "cd Code && npm install",
-    "install": "cd Code && npm install"
+    "build": "cd Code && npm install && echo 'Build complete'"
   },
-  "workspaces": [
-    "Code"
-  ],
   "engines": {
     "node": ">=18.0.0"
   },
