@@ -1,9 +1,37 @@
 const express = require("express");
 const path = require("path");
+const { spawn } = require("child_process");
 const session = require('express-session');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Start the Python backend Server.py alongside the Node app.
+const pythonExecutable = process.env.PYTHON || 'python';
+const pythonScript = path.resolve(__dirname, 'Public', 'python', 'Server.py');
+const pythonProcess = spawn(pythonExecutable, [pythonScript], {
+  cwd: path.dirname(pythonScript),
+  stdio: ['ignore', 'inherit', 'inherit'],
+});
+
+pythonProcess.on('error', err => {
+  console.error('Failed to start Server.py:', err);
+});
+
+pythonProcess.on('exit', (code, signal) => {
+  console.log(`Server.py exited with code=${code} signal=${signal}`);
+});
+
+const shutdown = () => {
+  if (!pythonProcess.killed) {
+    pythonProcess.kill();
+  }
+  process.exit();
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('exit', shutdown);
 
 app.use(
   session({

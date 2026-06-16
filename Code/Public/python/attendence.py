@@ -20,7 +20,7 @@ class AttendanceSystem:
     def __init__(
         self,
         dataset_path: str | None = None,
-        threshold: float = 0.30,
+        threshold: float = 0.50,
         frame_skip: int = 2,
     ):
 

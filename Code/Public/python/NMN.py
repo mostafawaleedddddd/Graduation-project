@@ -232,6 +232,9 @@ class DynamicNMN:
         # track_id -> recognised name; survives across frames so a person stays
         # labelled after the first hit (attendance only logs each name once).
         self.id_to_name_memory: Dict[int, str] = {}
+        self.track_last_seen: Dict[int, int] = {}
+        self._frame_index = 0
+        self._attendance_track_forget_gap = 8  # frames before a missing track is forgotten
 
     # ── Registration ──────────────────────────────────────────────────────────
 
@@ -290,7 +293,9 @@ class DynamicNMN:
         if not stages:
             return frame
 
+        self._frame_index += 1
         ctx     = FrameContext()
+        ctx.set("_frame_index", self._frame_index)
         current = frame
 
         for stage in stages:
@@ -367,10 +372,13 @@ class DynamicNMN:
                 tracker_model = self._modules["Tracking"].model
                 _tm  = tracker_model
                 _mem = self.id_to_name_memory   # persistent dict on the NMN instance
+                _last_seen = self.track_last_seen
                 def _attendance_bridge_with_tracker(frame, ctx, model,
-                                                     _tracker=_tm, _memory=_mem):
-                    ctx.set("_tracker_model",   _tracker)
+                                                     _tracker=_tm, _memory=_mem,
+                                                     _last_seen=_last_seen):
+                    ctx.set("_tracker_model",    _tracker)
                     ctx.set("_id_to_name_memory", _memory)
+                    ctx.set("_track_last_seen",   _last_seen)
                     return bridge_attendance_tracking(frame, ctx, model)
                 self._modules["Attendance"].set_bridge(_attendance_bridge_with_tracker)
                 logger.info("[NMN] Bridge installed: Attendance ← Tracking")
@@ -378,6 +386,7 @@ class DynamicNMN:
                 # Bridge removed — restore normal ID label drawing on the tracker
                 self._modules["Attendance"].set_bridge(None)
                 self.id_to_name_memory.clear()   # wipe memory when bridge is off
+                self.track_last_seen.clear()
                 if "Tracking" in self._modules:
                     tracker = self._modules["Tracking"].model
                     if hasattr(tracker, "suppress_draw"):
@@ -525,8 +534,19 @@ def bridge_attendance_tracking(
     # ── Grab the persistent memory dict from the NMN instance ────────────────
     # Injected into ctx by the wrapper closure in _install_bridges.
     memory: dict = ctx.get("_id_to_name_memory")  # track_id → name, persists across frames
+    last_seen: dict = ctx.get("_track_last_seen")  # track_id → last frame index seen
+    frame_index: int = ctx.get("_frame_index", 0)
     if memory is None:
         memory = {}  # safety fallback (should never happen)
+    if last_seen is None:
+        last_seen = {}
+
+    # ── Forget old identities for tracks missing for a while ────────────────
+    forget_gap = ctx.get("_attendance_forget_gap", 8)
+    stale = [tid for tid, last in last_seen.items() if frame_index - last > forget_gap]
+    for tid in stale:
+        memory.pop(tid, None)
+        last_seen.pop(tid, None)
 
     # ── Parse tracked box entries ─────────────────────────────────────────────
     def _parse_entry(entry):
@@ -547,6 +567,7 @@ def bridge_attendance_tracking(
             continue
 
         active_ids.add(track_id)
+        last_seen[track_id] = frame_index
 
         # ── Already identified this track — skip recognition, keep name ──────
         if track_id in memory:
@@ -574,11 +595,6 @@ def bridge_attendance_tracking(
             if recognised_name != "UNKNOWN":
                 memory[track_id] = recognised_name
                 logger.debug("[NMN] Track %s identified as %s", track_id, recognised_name)
-
-    # ── Purge IDs that are no longer tracked (track lost / left frame) ────────
-    stale = [tid for tid in memory if tid not in active_ids]
-    for tid in stale:
-        del memory[tid]
 
     # ── Store resolved mapping in ctx for other modules ───────────────────────
     ctx.set("id_to_name", dict(memory))
