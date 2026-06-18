@@ -318,10 +318,9 @@ class HumanTracker:
             x1, y1, x2, y2 = map(int, box)
             output.append((t.id, [x1, y1, x2, y2]))
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            # When suppress_draw is True the NMN attendance bridge will
-            # overdraw the label with the recognised person's name instead.
+            # Show a generic class label only; keep the track ID internal.
             if not self.suppress_draw:
-                cv2.putText(frame, f"ID {t.id}", (x1, y1 - 6),
+                cv2.putText(frame, "person", (x1, y1 - 6),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
 
         self.last_tracks = output
