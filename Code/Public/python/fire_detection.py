@@ -3,8 +3,11 @@ import numpy as np
 import torch
 import time
 from datetime import datetime
-from collections import defaultdict
+from threading import Thread
 from ultralytics import YOLO
+from emailsettings import send_email
+
+EMAIL_JPEG_QUALITY = 95
 
 
 class FireSmokeDetector:
@@ -39,6 +42,9 @@ class FireSmokeDetector:
         # ================= ALERT TRACKING =================
         self.alert_log   = []          # list of {class, confidence, time}
         self.frame_count = 0
+        self.receiver_email = None
+        self._email_sent = {cls: False for cls in self.ALERT_THRESHOLDS}
+        self._last_frame: np.ndarray | None = None
 
         # Consecutive detection streak tracking per class
         # _streak_start[cls]:  wall-clock time when the current streak began
@@ -63,6 +69,7 @@ class FireSmokeDetector:
         """
         self.frame_count += 1
         now = time.monotonic()
+        self._last_frame = frame.copy()
 
         results = self.model.predict(
             source  = frame,
@@ -126,6 +133,52 @@ class FireSmokeDetector:
 
         return frame
 
+    def set_receiver_email(self, email: str | None):
+        """
+        Set the email address that should receive fire/smoke alerts.
+        Pass None to disable email notifications.
+        """
+        self.receiver_email = email
+        label = email if email else "no recipient set"
+        print(f"📧 Alert emails will be sent to: {label}")
+
+    def _send_alert_email(self, cls_name: str, elapsed: float, frame: np.ndarray | None = None):
+        """
+        Send a one-shot email alert for the given class once the threshold is reached.
+        Includes the latest frame as an attachment when available.
+        """
+        if self._email_sent[cls_name] or not self.receiver_email:
+            return
+
+        subject = f"🚨 {cls_name.upper()} Alert Detected"
+        body = (
+            f"{cls_name.upper()} has been detected continuously for "
+            f"{elapsed:.1f} seconds."
+        )
+
+        image_bytes = None
+        if frame is not None:
+            success, encoded_img = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), EMAIL_JPEG_QUALITY],
+            )
+            if success:
+                image_bytes = encoded_img.tobytes()
+
+        def _send():
+            sent = send_email(
+                subject=subject,
+                body=body,
+                image_bytes=image_bytes,
+                receiver_email=self.receiver_email,
+            )
+            if sent:
+                print(f"✅ {cls_name.upper()} alert email sent to {self.receiver_email}")
+
+        self._email_sent[cls_name] = True
+        Thread(target=_send, daemon=True).start()
+
     # ================= ALERT STATUS =================
     def get_alert_status(self) -> dict:
        
@@ -139,17 +192,22 @@ class FireSmokeDetector:
 
             if streak_start is not None and still_active:
                 elapsed = now - streak_start
+                is_alert = elapsed >= threshold
                 status[cls_name] = {
-                    "alert":           elapsed >= threshold,
+                    "alert":           is_alert,
                     "elapsed_seconds": round(elapsed, 1),
                     "threshold":       threshold,
                 }
+                if is_alert and cls_name == "fire":
+                    self._send_alert_email(cls_name, elapsed, frame=self._last_frame)
             else:
                 status[cls_name] = {
                     "alert":           False,
                     "elapsed_seconds": 0.0,
                     "threshold":       threshold,
                 }
+                if not still_active:
+                    self._email_sent[cls_name] = False
 
         return status
 
@@ -177,6 +235,7 @@ class FireSmokeDetector:
         for cls_name in self.ALERT_THRESHOLDS:
             self._streak_start[cls_name] = None
             self._last_seen[cls_name]    = 0.0
+            self._email_sent[cls_name]   = False
         print("✅ Detection log cleared")
 
 

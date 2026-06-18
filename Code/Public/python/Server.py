@@ -166,6 +166,7 @@ class LiveStreamServer:
         self.shelf_orchestrator  = ShelfOrchestrator()
         self.fire_smoke_detector = FireSmokeDetector()
         self.weapon_detector     = WeaponDetector(weights="weapon_best.pt")
+        self.alert_email         = None
 
         # ================= PER-CAMERA MODEL INSTANCES =================
         # Models that are NOT thread-safe (e.g. any YOLO-based detector)
@@ -417,7 +418,10 @@ class LiveStreamServer:
             if step not in cam_models:
                 print(f"🔧 Creating dedicated {step} model for camera '{cam_id}'")
                 if step == "Fire & Smoke Detection":
-                    cam_models[step] = FireSmokeDetector()
+                    detector = FireSmokeDetector()
+                    if self.alert_email:
+                        detector.set_receiver_email(self.alert_email)
+                    cam_models[step] = detector
                 elif step == "Tracking":
                     cam_models[step] = HumanTracker()
                 elif step == "Security":
@@ -959,8 +963,17 @@ class LiveStreamServer:
             """
             data  = await request.json()
             email = data.get("email") or None
+            self.alert_email = email
+
+            self.fire_smoke_detector.set_receiver_email(email)
             self.security.set_receiver_email(email)
             self.smart_security_guard.set_receiver_email(email)
+
+            for cam_models in self._per_camera_models.values():
+                fire_model = cam_models.get("Fire & Smoke Detection")
+                if fire_model and hasattr(fire_model, "set_receiver_email"):
+                    fire_model.set_receiver_email(email)
+
             return {
                 "status":      "ok",
                 "alert_email": email,
