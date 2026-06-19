@@ -3,8 +3,12 @@ import numpy as np
 import torch
 import time
 from datetime import datetime
+from threading import Thread
 from typing import List, Optional, Tuple
 from ultralytics import YOLO
+from emailsettings import send_email
+
+EMAIL_JPEG_QUALITY = 95
 
 class WeaponDetector:
 
@@ -12,6 +16,7 @@ class WeaponDetector:
     ALERT_THRESHOLDS = {
         "gun":     2.0,
         "knife":   2.0,
+        "pisau":   2.0,
         "rifle":   2.0,
         "bomb":    1.0,   
         "pistol":  2.0,
@@ -62,6 +67,9 @@ class WeaponDetector:
         # ================= WEAPON ALERT TRACKING =================
         self.alert_log   = []
         self.frame_count = 0
+        self.receiver_email = None
+        self._email_sent = {cls: False for cls in self.ALERT_THRESHOLDS}
+        self._last_frame: np.ndarray | None = None
 
         self._streak_start: dict[str, float | None] = {cls: None for cls in self.ALERT_THRESHOLDS}
         self._last_seen: dict[str, float] = {cls: 0.0 for cls in self.ALERT_THRESHOLDS}
@@ -109,6 +117,7 @@ class WeaponDetector:
     ) -> np.ndarray:
         self.frame_count += 1
         now = time.monotonic()
+        self._last_frame = frame.copy()
 
         # ── 2. WEAPON DETECTION (EXISTING) ──────────────────────────────────
         results = self.model.predict(
@@ -160,6 +169,53 @@ class WeaponDetector:
 
         return frame
 
+    def set_receiver_email(self, email: str | None):
+        """
+        Set the email address that should receive weapon alerts.
+        Pass None to disable email notifications.
+        """
+        self.receiver_email = email
+        label = email if email else "no recipient set"
+        print(f"📧 Weapon alert emails will be sent to: {label}")
+
+    def _send_alert_email(self, cls_name: str, elapsed: float, frame: np.ndarray | None = None):
+        """
+        Send a one-shot weapon alert email once the detection threshold is reached.
+        Includes the latest annotated frame when available.
+        """
+        if self._email_sent[cls_name] or not self.receiver_email:
+            return
+
+        subject = f"🚨 Weapon Alert Detected"
+        body = (
+            f"{cls_name.upper()} has been detected continuously for "
+            f"{elapsed:.1f} seconds."
+        )
+
+        image_bytes = None
+        if frame is not None:
+            success, encoded_img = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), EMAIL_JPEG_QUALITY],
+            )
+            if success:
+                image_bytes = encoded_img.tobytes()
+
+        def _send():
+            sent = send_email(
+                subject=subject,
+                body=body,
+                image_bytes=image_bytes,
+                image_filename="weapon_detected_frame.jpg",
+                receiver_email=self.receiver_email,
+            )
+            if sent:
+                print(f"✅ {cls_name.upper()} weapon alert email sent to {self.receiver_email}")
+
+        self._email_sent[cls_name] = True
+        Thread(target=_send, daemon=True).start()
+
     def process_with_context(
         self,
         frame: np.ndarray,
@@ -178,17 +234,22 @@ class WeaponDetector:
 
             if streak_start is not None and still_active:
                 elapsed = now - streak_start
+                is_alert = elapsed >= threshold
                 status[cls_name] = {
-                    "alert":           elapsed >= threshold,
+                    "alert":           is_alert,
                     "elapsed_seconds": round(elapsed, 1),
                     "threshold":       threshold,
                 }
+                if is_alert:
+                    self._send_alert_email(cls_name, elapsed, frame=self._last_frame)
             else:
                 status[cls_name] = {
                     "alert":           False,
                     "elapsed_seconds": 0.0,
                     "threshold":       threshold,
                 }
+                if not still_active:
+                    self._email_sent[cls_name] = False
 
         return status
 
@@ -203,6 +264,7 @@ class WeaponDetector:
         for cls_name in self.ALERT_THRESHOLDS:
             self._streak_start[cls_name] = None
             self._last_seen[cls_name]    = 0.0
+            self._email_sent[cls_name]   = False
 
     def _log_detection(self, cls_name: str, confidence: float):
         now = datetime.now().strftime("%H:%M:%S")

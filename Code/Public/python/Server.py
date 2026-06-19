@@ -435,7 +435,10 @@ class LiveStreamServer:
                 elif step == "Heatmap":
                     cam_models[step] = HeatmapBlock()
                 elif step == "Weapon Detection":                                  # ── NEW ──
-                    cam_models[step] = WeaponDetector(weights="weapon_best.pt")  # ── NEW ──
+                    detector = WeaponDetector(weights="weapon_best.pt")
+                    if self.alert_email:
+                        detector.set_receiver_email(self.alert_email)
+                    cam_models[step] = detector
                 else:
                     # Stateless models (Color Detection etc.) — return global instance
                     return None
@@ -966,6 +969,7 @@ class LiveStreamServer:
             self.alert_email = email
 
             self.fire_smoke_detector.set_receiver_email(email)
+            self.weapon_detector.set_receiver_email(email)
             self.security.set_receiver_email(email)
             self.smart_security_guard.set_receiver_email(email)
 
@@ -973,10 +977,37 @@ class LiveStreamServer:
                 fire_model = cam_models.get("Fire & Smoke Detection")
                 if fire_model and hasattr(fire_model, "set_receiver_email"):
                     fire_model.set_receiver_email(email)
+                weapon_model = cam_models.get("Weapon Detection")
+                if weapon_model and hasattr(weapon_model, "set_receiver_email"):
+                    weapon_model.set_receiver_email(email)
 
             return {
                 "status":      "ok",
                 "alert_email": email,
+            }
+
+        @self.app.post("/set_weapon_alert_email")
+        async def set_weapon_alert_email(request: Request):
+            """
+            Set the recipient for weapon detection emails.
+
+            Body (JSON):
+              { "email": "user@example.com" }
+              { "email": null }
+            """
+            data = await request.json()
+            email = data.get("email") or None
+            self.alert_email = email
+
+            self.weapon_detector.set_receiver_email(email)
+            for cam_models in self._per_camera_models.values():
+                weapon_model = cam_models.get("Weapon Detection")
+                if weapon_model and hasattr(weapon_model, "set_receiver_email"):
+                    weapon_model.set_receiver_email(email)
+
+            return {
+                "status": "ok",
+                "weapon_alert_email": email,
             }
 
         # ═══════════════════════════════════════════════════════════════
